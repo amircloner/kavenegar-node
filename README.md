@@ -278,6 +278,92 @@ Client side validation: ensures required parameters, positive pagenumber, enddat
 
 ---
 
+## لیست شماره های مسدود کننده خط (LineBlockedList)
+
+این متد، لیست شماره (موبایل) کاربرانی را برمی گرداند که دریافت پیامک از خط اختصاصی شما را مسدود (لغو) کرده اند. خروجی صفحه بندی است و در هر فراخوانی حداکثر 200 رکورد باز می گردد.
+
+### پارامترهای ورودی
+
+| نام | وضعیت | نوع | توضیح |
+|-----|-------|-----|-------|
+| linenumber | اجباری | String | شماره خط اختصاصی (مثل 30002225) |
+| blockreason | اختیاری | Integer | دلیل مسدودسازی: 0 وب سرویس، 1 پنل کاربری، 2 لغو ۱۱، 3 ادمین، 10 نامشخص (اگر خالی باشد همه) |
+| startdate | اختیاری | UnixTime | تاریخ شروع بازه (ثانیه). اگر ارسال نشود روز جاری در سمت سرویس لحاظ می شود |
+| pagenumber | اختیاری | Integer | شماره صفحه (۱ مبنا). اگر خالی باشد صفحه 1 در نظر گرفته می شود |
+
+### فیلدهای خروجی (metadata)
+
+| فیلد | توضیح |
+|------|-------|
+| totalcount | تعداد کل رکوردهای مطابق فیلتر |
+| currentpage | شماره صفحه فعلی |
+| totalpages | کل صفحات |
+| pagesize | اندازه صفحه (معمولاً 200) |
+
+### نکات
+1. برای واکشی کامل، تا زمانی که `currentpage < totalpages` است صفحه بعدی را درخواست کنید.
+2. اگر `blockreason` ارسال نشود، سرویس همه دلایل را باز می گرداند.
+3. مقدار `startdate` در صورت عدم ارسال، برای همان روز (سمت سرور) محاسبه می گردد.
+4. حداکثر اندازه هر صفحه 200 رکورد است.
+
+### نمونه درخواست (خام)
+```
+https://api.kavenegar.com/v1/{API-KEY}/Line/blocked/list.json?LineNumber=10002263&pageNumber=1&StartDate=1740300377&blockReason=0
+```
+
+### نمونه پاسخ
+```json
+{
+    "metadata": {
+        "totalcount": "1",
+        "currentpage": "1",
+        "totalpages": "1",
+        "pagesize": "200"
+    },
+    "return": { "status": 200, "message": "تایید شد" },
+    "entries": [
+        { "number": "09*********", "blockreason": 0, "date": 0 }
+    ]
+}
+```
+
+### مثال استفاده در کتابخانه (Promise / TypeScript)
+```ts
+import { KavenegarApi, LineBlockedNumberEntry, LineBlockedListMetadata } from 'kavenegar/dist/kavenegar';
+const api = new KavenegarApi({ apikey: process.env.KAVENEGAR_API_KEY! });
+
+async function fetchAllBlocked(line: string){
+    let page = 1;
+    const all: LineBlockedNumberEntry[] = [];
+    while(true){
+        const res = await api.LineBlockedList({ linenumber: line, pagenumber: page });
+        const list: LineBlockedNumberEntry[] = res.entries || [];
+        all.push(...list);
+        const meta = res.metadata as LineBlockedListMetadata | undefined;
+        if(!meta || meta.currentpage === meta.totalpages) break;
+        page += 1;
+    }
+    return all;
+}
+
+fetchAllBlocked('30002225').then(list => console.log('Blocked count:', list.length));
+```
+
+### مثال ساده (Callback / JavaScript)
+```js
+var Kavenegar = require('kavenegar');
+var api = Kavenegar.KavenegarApi({ apikey: 'your-api-key' });
+api.LineBlockedList({ linenumber: '30002225', blockreason: 0, pagenumber: 1 }, function(entries, status, message){
+    console.log(status, message);
+    console.log(entries);
+});
+```
+
+### English Summary (LineBlockedList)
+Retrieve paginated list of subscriber numbers that have blocked receiving SMS from a specific dedicated line. Parameters: linenumber (required), blockreason (optional filter), startdate (optional Unix time start of day range), pagenumber (optional 1-based). Each response includes entries[{ number, blockreason, date }] and metadata { totalcount, currentpage, totalpages, pagesize }. Keep calling while currentpage < totalpages to accumulate the full set.
+
+---
+
 #### پارامترهای متد Send
 
 | پارامتر | وضعیت | نوع | توضیح |

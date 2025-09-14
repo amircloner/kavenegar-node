@@ -178,6 +178,50 @@ export interface InboxPagedMetadata {
 
 export interface InboxPagedResponse extends KavenegarApiResponse<ReceiveEntry[], InboxPagedMetadata> {}
 
+// ---------------- Line Blocked Numbers (لیست شماره های مسدود کننده خط) ----------------
+/**
+ * Parameters for fetching blocked numbers for a dedicated line.
+ * Persian Doc Summary (شماره های مسدود شده):
+ *  - linenumber (اجباری) String: شماره خط (نمونه 30002225)
+ *  - blockreason (اختیاری) Integer: فیلتر دلیل مسدودسازی
+ *      0 = وب سرویس, 1 = پنل کاربری, 2 = لغو 11, 3 = ادمین, 10 = نامشخص (اگر ارسال نشود همه نمایش داده می شوند)
+ *  - startdate (اختیاری) UnixTime Long: تاریخ شروع بازه (اگر خالی باشد تاریخ همان روز لحاظ می شود توسط سرویس)
+ *  - pagenumber (اختیاری) Integer: شماره صفحه (۱ مبنا)؛ هر صفحه حداکثر 200 شماره برمی گرداند.
+ * Notes:
+ *  - Response includes metadata with paging info identical key naming: totalcount, currentpage, totalpages, pagesize
+ *  - Keep optional params undefined if user did not provide (server default logic applies)
+ */
+export interface LineBlockedListParams {
+  linenumber: string;
+  blockreason?: number; // 0,1,2,3,10 per doc
+  startdate?: number; // Unix time seconds (LONG). If omitted server uses current day start.
+  pagenumber?: number; // 1-based page number
+  [extra: string]: any;
+}
+
+/**
+ * Single entry for blocked numbers list.
+ * number: شماره فرد مسدود کننده
+ * blockreason: دلیل (numeric code)
+ * date: UnixTime تاریخ دریافت پیامک (زمان ثبت مسدودسازی)
+ */
+export interface LineBlockedNumberEntry {
+  number: string;
+  blockreason: number;
+  date: number;
+  [extra: string]: any;
+}
+
+export interface LineBlockedListMetadata {
+  totalcount: string;
+  currentpage: string;
+  totalpages: string;
+  pagesize: string; // server fixed 200 per doc
+  [extra: string]: any;
+}
+
+export interface LineBlockedListResponse extends KavenegarApiResponse<LineBlockedNumberEntry[], LineBlockedListMetadata> {}
+
 // Parameters for status by receptor (statusbyreceptor)
 export interface StatusByReceptorParams {
   receptor: string; // single receptor per docs (number/MSISDN)
@@ -312,6 +356,7 @@ export type AnyParams =
   | SelectOutboxParams
   | LatestOutboxParams
   | CountOutboxParams
+  | LineBlockedListParams
   | Record<string, any>;
 
 export class KavenegarApi {
@@ -742,6 +787,52 @@ export class KavenegarApi {
       'statusbyreceptor',
       payload,
       cb as KavenegarCallback<StatusByReceptorEntry[]>
+    );
+  }
+
+  /**
+   * List blocked numbers for a specific dedicated line (Line/blocked/list).
+   * Persian Doc Summary (شماره های مسدود شده):
+   *  - linenumber (required) شماره خط
+   *  - blockreason (optional) فیلتر دلیل: 0 وب سرویس,1 پنل کاربری,2 لغو ۱۱,3 ادمین,10 نامشخص
+   *  - startdate (optional) UnixTime شروع بازه؛ اگر خالی باشد روز جاری در نظر گرفته می شود.
+   *  - pagenumber (optional) شماره صفحه (۱ مبنا). هر فراخوانی حداکثر 200 شماره.
+   * Response shape: { return, entries: [{ number, blockreason, date }], metadata: { totalcount, currentpage, totalpages, pagesize } }
+   * Notes:
+   *  - Iterate while currentpage < totalpages for complete list.
+   *  - Library performs minimal validation (linenumber non-empty string, positive integer page, blockreason numeric if provided).
+   */
+  LineBlockedList(
+    params: LineBlockedListParams,
+    cb?: KavenegarCallback<LineBlockedNumberEntry[]>
+  ) {
+    if (!params || typeof params.linenumber !== 'string' || !params.linenumber.trim()) {
+      throw new Error('linenumber is required and must be non-empty string');
+    }
+    const payload: Record<string, any> = { linenumber: params.linenumber };
+    if (params.blockreason !== undefined) {
+      if (typeof params.blockreason !== 'number' || !Number.isFinite(params.blockreason)) {
+        throw new Error('blockreason must be a number when provided');
+      }
+      payload.blockreason = params.blockreason;
+    }
+    if (params.startdate !== undefined) {
+      if (typeof params.startdate !== 'number' || !Number.isFinite(params.startdate)) {
+        throw new Error('startdate must be a unix time number when provided');
+      }
+      payload.startdate = params.startdate;
+    }
+    if (params.pagenumber !== undefined) {
+      if (!Number.isInteger(params.pagenumber) || params.pagenumber < 1) {
+        throw new Error('pagenumber must be a positive integer (1-based)');
+      }
+      payload.pagenumber = params.pagenumber;
+    }
+    return this.request<LineBlockedNumberEntry[], LineBlockedListMetadata>(
+      'Line/blocked',
+      'list',
+      payload,
+      cb as KavenegarCallback<LineBlockedNumberEntry[]>
     );
   }
 }
