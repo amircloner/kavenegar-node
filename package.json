@@ -1,7 +1,7 @@
 {
   "name": "kavenegar",
-  "version": "1.1.7",
-  "description": "Kavenegar Node.js SDK (SMS, Voice, Verify Lookup) with TypeScript typings",
+  "version": "1.1.8",
+  "description": "Kavenegar Node.js SDK (SMS, Voice, Verify Lookup) with TypeScript typings – supports tag, hide, localid, scheduling",
   "main": "dist/kavenegar.js",
   "types": "dist/kavenegar.d.ts",
   "exports": {
@@ -28,7 +28,12 @@
     "verify",
     "lookup",
     "otp",
-    "voice"
+    "voice",
+    "tag",
+    "hide",
+    "localid",
+    "schedule",
+    "typescript"
   ],
   "author": "Arya sadeghy <Aryasadeghy@gmail.com> (http://yourblog.com)",
   "license": "MIT",

@@ -31,10 +31,21 @@ export interface SendParams {
   message: string;
   sender?: string;
   // Additional optional params
-  date?: number;
-  localid?: string | string[];
-  type?: number; // message type
-  hide?: boolean;
+  date?: number; // Unix time schedule; if omitted sends immediately
+  localid?: string | string[]; // single id OR list matching receptor count (comma separated if string)
+  /**
+   * Message type in handset (only applicable to 3000 lines per docs). Kept loose because API accepts numeric or textual codes.
+   */
+  type?: string | number;
+  /**
+   * If 1 (or true) receptor number will be hidden in panel/web logs.
+   * Accept both boolean and numeric for convenience.
+   */
+  hide?: boolean | 0 | 1;
+  /**
+   * Optional analytics tag (max 200 chars, english letters/digits, dash - or underscore _ only, no spaces or special chars)
+   */
+  tag?: string;
 }
 
 export interface StatusParams {
