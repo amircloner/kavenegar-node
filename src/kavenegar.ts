@@ -356,13 +356,24 @@ export interface LookupParams {
   [extra: string]: string | number | undefined;
 }
 
+/**
+ * Parameters for account/config endpoint.
+ * Doc (FA) summary:
+ *  - apilogs: justfaults | enabled | disabled (supports boolean convenience => true=enabled, false=disabled, 1/0 likewise)
+ *  - dailyreport: enabled | disabled (boolean/number convenience accepted)
+ *  - debugmode: enabled | disabled (boolean/number convenience accepted)
+ *  - defaultsender: dedicated line number to be used as fallback when sender omitted in send
+ *  - mincreditalarm: integer rial threshold for low credit SMS alert
+ *  - resendfailed: enabled | disabled (boolean/number convenience accepted)
+ */
 export interface AccountConfigParams {
-  apilogs?: boolean | number;
-  dailyreport?: boolean | number;
-  debugmode?: boolean | number;
+  apilogs?: 'justfaults' | 'enabled' | 'disabled' | boolean | 0 | 1;
+  dailyreport?: 'enabled' | 'disabled' | boolean | 0 | 1;
+  debugmode?: 'enabled' | 'disabled' | boolean | 0 | 1;
   defaultsender?: string;
-  mincreditalarm?: number;
-  resendfailed?: boolean | number;
+  mincreditalarm?: number; // integer rial value
+  resendfailed?: 'enabled' | 'disabled' | boolean | 0 | 1;
+  [extra: string]: any;
 }
 
 export interface PostalCodeParams {
@@ -413,6 +424,26 @@ export interface AccountInfoEntry {
   remaincredit: number;
   expiredate: number; // UnixTime (seconds)
   type: 'master' | 'child' | string; // keep string fallback for forward compatibility
+  [extra: string]: any;
+}
+
+/**
+ * Response entries for account/config.
+ * All values returned as strings by API (per sample):
+ *  apilogs: justfaults | enabled | disabled
+ *  dailyreport: enabled | disabled
+ *  debugmode: enabled | disabled
+ *  defaultsender: sender line (string numeric)
+ *  mincreditalarm: threshold (string numeric)
+ *  resendfailed: true | false (NOTE: sample shows 'true'/'false' instead of enabled/disabled)
+ */
+export interface AccountConfigEntry {
+  apilogs: string;
+  dailyreport: string;
+  debugmode: string;
+  defaultsender: string;
+  mincreditalarm: string; // numeric string
+  resendfailed: string; // 'true' | 'false' or maybe 'enabled' | 'disabled' depending on server version
   [extra: string]: any;
 }
 
@@ -878,7 +909,82 @@ export class KavenegarApi {
     return this.request<AccountInfoEntry>('account', 'info', payload, cb as KavenegarCallback<AccountInfoEntry>);
   }
   AccountConfig(params: AccountConfigParams, cb?: KavenegarCallback) {
-    return this.request('account', 'config', params, cb);
+    /**
+     * AccountConfig - تنظیمات ضروری حساب
+     * English:
+     *  Retrieve or modify account configuration settings. Calling without any parameters returns the current values.
+     *  Passing one or more parameters updates them and returns the new snapshot in entries.
+     * Persian Summary:
+     *  این متد برای دریافت یا ویرایش تنظیمات حساب است. در صورت عدم ارسال هیچ پارامتری مقادیر فعلی بازگردانده می شود.
+     *  با ارسال هر پارامتر مقدار جدید ذخیره و مقادیر بروز برگردانده می شود.
+     *
+     * Parameters:
+     *  - apilogs: justfaults | enabled | disabled (همه درخواست ها / فقط خطاها / غیرفعال). Boolean/0/1 also accepted.
+     *  - dailyreport: enabled | disabled (گزارش روزانه پیامک ساعت ۱۰ صبح). Boolean/0/1 accepted.
+     *  - debugmode: enabled | disabled (در حالت فعال، ارسال پیامک انجام نمی شود). Boolean/0/1 accepted.
+     *  - defaultsender: خط پیش فرض ارسال (در صورت عدم تعیین sender در ارسال پیام).
+     *  - mincreditalarm: حداقل اعتبار (ریال) برای هشدار کمبود اعتبار (عدد صحیح غیر منفی).
+     *  - resendfailed: enabled | disabled (ارسال مجدد خودکار پیامک های نرسیده). Boolean/0/1 accepted. NOTE: API sample shows true/false strings in response.
+     *
+     * Normalization Rules:
+     *  - Boolean true/1 -> enabled (or 'true' for resendfailed) ; false/0 -> disabled (or 'false').
+     *  - apilogs also accepts 'justfaults'.
+     *  - Throws descriptive Error for invalid values before network call.
+     *
+     * Example (update multiple):
+     *  api.AccountConfig({ defaultsender: '10004535', apilogs: 'justfaults', debugmode: true })
+     *    .then(r => console.log(r.entries));
+     *
+     * Example (fetch current):
+     *  api.AccountConfig({}).then(r => console.log(r.entries));
+     */
+    // Build validated & normalized payload according to docs.
+    const normalizeToggle = (value: any, { allowJustFaults = false, resendMode = false } = {}) => {
+      if (value === undefined || value === null) return undefined;
+      if (typeof value === 'string') {
+        const v = value.toLowerCase();
+        if (allowJustFaults && ['justfaults', 'enabled', 'disabled'].includes(v)) return v;
+        if (!allowJustFaults && ['enabled', 'disabled'].includes(v)) return v;
+        // Some users may try 'true'/'false' textual
+        if (['true', 'false'].includes(v) && resendMode) return v; // for resendfailed returning true/false style
+        if (['true', 'false'].includes(v)) return v === 'true' ? 'enabled' : 'disabled';
+        throw new Error(`Invalid string value '${value}'`);
+      }
+      if (typeof value === 'boolean') return value ? (resendMode ? 'true' : 'enabled') : (resendMode ? 'false' : 'disabled');
+      if (value === 1) return resendMode ? 'true' : 'enabled';
+      if (value === 0) return resendMode ? 'false' : 'disabled';
+      throw new Error('Invalid toggle value (expected string|boolean|0|1)');
+    };
+    const payload: Record<string, any> = {};
+    if ('apilogs' in params && params.apilogs !== undefined) {
+      payload.apilogs = normalizeToggle(params.apilogs, { allowJustFaults: true });
+    }
+    if ('dailyreport' in params && params.dailyreport !== undefined) {
+      payload.dailyreport = normalizeToggle(params.dailyreport);
+    }
+    if ('debugmode' in params && params.debugmode !== undefined) {
+      payload.debugmode = normalizeToggle(params.debugmode);
+    }
+    if ('resendfailed' in params && params.resendfailed !== undefined) {
+      // API documentation shows enabled/disabled, but sample output shows true/false; choose output form expected by server: use true/false strings.
+      payload.resendfailed = normalizeToggle(params.resendfailed, { resendMode: true });
+    }
+    if (params.defaultsender !== undefined) {
+      if (typeof params.defaultsender !== 'string' || !params.defaultsender.trim()) {
+        throw new Error('defaultsender must be a non-empty string when provided');
+      }
+      payload.defaultsender = params.defaultsender.trim();
+    }
+    if (params.mincreditalarm !== undefined) {
+      if (typeof params.mincreditalarm !== 'number' || !Number.isFinite(params.mincreditalarm) || params.mincreditalarm < 0) {
+        throw new Error('mincreditalarm must be a non-negative number');
+      }
+      if (!Number.isInteger(params.mincreditalarm)) {
+        throw new Error('mincreditalarm must be an integer rial amount');
+      }
+      payload.mincreditalarm = params.mincreditalarm;
+    }
+    return this.request<AccountConfigEntry>('account', 'config', payload, cb as KavenegarCallback<AccountConfigEntry>);
   }
   CallMakeTTS(params: CallMakeTTSParams, cb?: KavenegarCallback) {
     // Validation per voice call doc
