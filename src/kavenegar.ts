@@ -127,11 +127,32 @@ export interface LatestOutboxParams {
 // Response entries of LatestOutbox share the same shape as SelectEntry.
 export interface LatestOutboxEntry extends SelectEntry {}
 
+// Parameters for Receive inbox messages
+// Updated per latest Persian docs snippet provided:
+//  - linenumber (اجباری) String: شماره خط (e.g. 30002225)
+//  - isread (اجباری) Integer: 0 = unread, 1 = read
+// Legacy support: previous version used `line` optional param. We'll map `line` -> `linenumber`.
 export interface ReceiveParams {
-  line?: string;
-  isread?: boolean | number; // API might return 0/1
+  /** Dedicated line number (e.g., 30002225). Required in new API spec. */
+  linenumber?: string; // keep optional at type level for backward compat; runtime will enforce.
+  /** Message read flag: 0 unread, 1 read. Accepts boolean for convenience. Required. */
+  isread?: number | boolean;
+  /** Optional start unix time (seconds) – not in provided doc but kept for backward compatibility */
   fromdate?: number;
+  /** Optional end unix time (seconds) */
   todate?: number;
+  /** Backward compatibility alias – will be mapped to linenumber if provided. */
+  line?: string;
+}
+
+// Response entry for Receive method
+export interface ReceiveEntry {
+  messageid: number; // شناسه پیام دریافتی
+  message: string; // متن پیام
+  sender: string; // شماره ارسال کننده
+  receptor: string; // شماره دریافت کننده (your line)
+  date: number; // UnixTime تاریخ دریافت
+  [extra: string]: any; // forward compatibility
 }
 
 // Parameters for status by receptor (statusbyreceptor)
@@ -544,8 +565,32 @@ export class KavenegarApi {
   Cancel(params: Record<string, any>, cb?: KavenegarCallback) {
     return this.request('sms', 'cancel', params, cb);
   }
-  Receive(params: ReceiveParams, cb?: KavenegarCallback) {
-    return this.request('sms', 'receive', params, cb);
+  Receive(params: ReceiveParams, cb?: KavenegarCallback<ReceiveEntry[]>) {
+    if (!params) throw new Error('params required');
+    // Backward compatibility: allow `line` alias
+    const linenumber = params.linenumber || params.line;
+    if (!linenumber) {
+      throw new Error('linenumber is required');
+    }
+    if (typeof linenumber !== 'string' || !linenumber.trim()) {
+      throw new Error('linenumber must be a non-empty string');
+    }
+    if (typeof params.isread === 'undefined' || params.isread === null) {
+      throw new Error('isread is required (0 for unread, 1 for read)');
+    }
+    let isread: number;
+    if (typeof params.isread === 'boolean') {
+      isread = params.isread ? 1 : 0;
+    } else if (params.isread === 0 || params.isread === 1) {
+      isread = params.isread;
+    } else {
+      throw new Error('isread must be 0, 1, false, or true');
+    }
+    const payload: Record<string, any> = { linenumber, isread };
+    // Pass through optional date filters if user supplied (not in new snippet but kept for compatibility)
+    if (typeof params.fromdate === 'number') payload.fromdate = params.fromdate;
+    if (typeof params.todate === 'number') payload.todate = params.todate;
+    return this.request<ReceiveEntry[]>('sms', 'receive', payload, cb as KavenegarCallback<ReceiveEntry[]>);
   }
   CountInbox(params: Record<string, any>, cb?: KavenegarCallback) {
     return this.request('sms', 'countinbox', params, cb);

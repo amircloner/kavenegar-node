@@ -85,6 +85,105 @@ sample output
 */
 ```
 
+## دریافت پیامک های ورودی (Receive Inbox)
+
+این متد برای بازیابی پیامک‌های دریافتی روی یک خط اختصاصی استفاده می‌شود. در صورتی که «URL دریافت لحظه‌ای» را در پنل تنظیم کرده باشید، پیامک‌ها بلافاصله به آدرس شما POST می‌شوند. اما اگر به هر دلیل نرسند یا URL نداشته باشید، می‌توانید با این متد آنها را (تا زمانی که خوانده نشده اند) بازیابی کنید.
+
+در هر بار فراخوانی حداکثر 100 رکورد بازگردانده می‌شود. کافی است تا وقتی که تعداد رکوردهای برگشتی 100 است مجدداً متد را فراخوانی کنید تا صف تخلیه شود. پس از اینکه پیامک‌ها با `isread=0` واکشی شدند، وضعیت آنها در سامانه به «خوانده شده» تغییر می‌کند (`isRead = 1`).
+
+### ورودی
+
+| پارامتر | وضعیت | نوع | توضیح |
+|---------|-------|-----|-------|
+| linenumber | اجباری | String | شماره خط اختصاصی (مثل 30002225) |
+| isread | اجباری | 0/1 | 0 = پیامک‌های خوانده نشده (جدید)، 1 = فقط پیامک‌های علامت زده شده به عنوان خوانده شده |
+
+نکات:
+1. برای دریافت پیامک‌های جدید مقدار `isread=0` ارسال کنید.
+2. پس از واکشی با `isread=0`، پیامک‌ها در سامانه خوانده شده می‌شوند و نیاز به دریافت مجدد ندارند مگر اینکه پیام جدیدی رسیده باشد.
+3. حداکثر 100 رکورد در هر پاسخ – اگر طول آرایه 100 بود، فراخوانی بعدی را انجام دهید.
+4. کتابخانه برای سازگاری نسخه‌های قبلی `line` را هم قبول کرده و به `linenumber` نگاشت می‌کند.
+5. می‌توانید `isread` را به صورت boolean (`true/false`) نیز ارسال کنید؛ به 1/0 تبدیل می‌شود.
+
+### خروجی نمونه
+
+```json
+{
+    "return": { "status": 200, "message": "تایید شد" },
+    "entries": [
+        {
+            "messageid": 35850015,
+            "message": "خدمات پیام کوتاه کاوه نگار",
+            "sender": "09*********",
+            "receptor": "3000202030",
+            "date": 1357206241
+        },
+        {
+            "messageid": 35850016,
+            "message": "خدمات پیام کوتاه کاوه نگار",
+            "sender": "09*********",
+            "receptor": "3000202030",
+            "date": 1357103281
+        }
+    ]
+}
+```
+
+### مثال استفاده (JavaScript)
+
+```js
+var Kavenegar = require('kavenegar');
+var api = Kavenegar.KavenegarApi({ apikey: 'your-api-key' });
+
+async function fetchUnread(){
+    let all = [];
+    while(true){
+        const res = await api.Receive({ linenumber: '3000202030', isread: 0 });
+        const batch = res.entries || [];
+        all = all.concat(batch);
+        if(batch.length < 100) break; // no more pages
+    }
+    console.log('Total unread received:', all.length);
+}
+fetchUnread();
+```
+
+### TypeScript / Promise
+
+```ts
+import { KavenegarApi, ReceiveEntry } from 'kavenegar/dist/kavenegar';
+const api = new KavenegarApi({ apikey: process.env.KAVENEGAR_API_KEY! });
+
+async function unreadBatches(){
+    const first = await api.Receive({ linenumber: '3000202030', isread: 0 });
+    const entries: ReceiveEntry[] = first.entries;
+    entries.forEach(m => console.log(m.messageid, m.sender, m.message));
+}
+unreadBatches();
+```
+
+### English Summary (Receive Inbox)
+
+Fetch inbound (MO) SMS messages for a dedicated line. Required params: `linenumber` (your line) and `isread` (0 for unread/new, 1 for already marked as read). Each call returns up to 100 messages. To drain the inbox keep calling while each response returns 100 records. When you pull with `isread=0` the returned messages become marked as read server-side. The SDK accepts legacy `line` alias and boolean `isread` values (true/false) which are normalized to 1/0.
+
+#### Example (loop until empty)
+```ts
+async function drain(api: KavenegarApi, line: string){
+    const collected: ReceiveEntry[] = [];
+    while(true){
+        const res = await api.Receive({ linenumber: line, isread: 0 });
+        const list = res.entries || [];
+        collected.push(...list);
+        if(list.length < 100) break;
+    }
+    return collected;
+}
+```
+
+Error cases: 400 (missing/invalid params), 407 (access denied), others per platform policy.
+
+---
+
 #### پارامترهای متد Send
 
 | پارامتر | وضعیت | نوع | توضیح |
