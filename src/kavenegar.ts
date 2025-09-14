@@ -126,6 +126,27 @@ export interface StatusByReceptorEntry {
 }
 
 /**
+ * Parameters for SelectOutbox (لیست ارسال ها)
+ * Fetch list of sent messages (outbox) in a given time window.
+ * Persian Doc Highlights:
+ *  - startdate (اجباری) UnixTime seconds
+ *  - enddate (اختیاری) UnixTime seconds
+ *  - sender (اختیاری) شماره خط اختصاصی
+ * Constraints / Notes:
+ *  - startdate must NOT be more than 4 days (345600 seconds) in the past relative to 'now'.
+ *  - If enddate provided: MUST be >= startdate.
+ *  - Max span (enddate - startdate) <= 1 day (86400 seconds).
+ *  - If enddate omitted server returns messages from startdate up to now (bounded by internal 1 day / 500 records limit as per docs).
+ *  - Max 500 records returned (server side limit; no pagination yet).
+ */
+export interface SelectOutboxParams {
+  startdate: number; // required UnixTime (seconds)
+  enddate?: number; // optional UnixTime (seconds)
+  sender?: string; // optional dedicated sender line
+  [extra: string]: any; // forward compatibility
+}
+
+/**
  * Parameters for Verify Lookup (اعتبار سنجی)
  * Doc (FA) summary:
  *  - receptor (الزامی): شماره گیرنده. بین المللی با 00 + کد کشور
@@ -184,6 +205,7 @@ export type AnyParams =
   | AccountConfigParams
   | PostalCodeParams
   | CallMakeTTSParams
+  | SelectOutboxParams
   | Record<string, any>;
 
 export class KavenegarApi {
@@ -359,8 +381,39 @@ export class KavenegarApi {
     const normalized = this.normalizeStatusParams(params as StatusParams, 'messageid');
     return this.request<SelectEntry[]>('sms', 'select', normalized, cb as KavenegarCallback<SelectEntry[]>);
   }
-  SelectOutbox(params: Record<string, any>, cb?: KavenegarCallback) {
-    return this.request('sms', 'selectoutbox', params, cb);
+  /**
+   * Retrieve list of sent messages (outbox) within a time window.
+   * Validation enforced client-side according to Persian documentation (لیست ارسال ها):
+   *  - startdate: required (UnixTime seconds). Must not be older than 4 days from now.
+   *  - enddate: optional. If provided must be >= startdate.
+   *  - Max allowed span between startdate and enddate: 1 day (86400 seconds).
+   *  - To fetch from startdate until now, omit enddate.
+   *  - Optional sender to restrict to a specific dedicated line.
+   * Errors thrown before network call when constraints violated.
+   */
+  SelectOutbox(params: SelectOutboxParams, cb?: KavenegarCallback<SelectEntry[]>) {
+    if (!params || typeof params.startdate !== 'number' || !Number.isFinite(params.startdate)) {
+      throw new Error('startdate (unix seconds) is required');
+    }
+    const nowSec = Math.floor(Date.now() / 1000);
+    const FOUR_DAYS = 4 * 86400; // 345600 seconds
+    const ONE_DAY = 86400;
+    if (nowSec - params.startdate > FOUR_DAYS) {
+      throw new Error('startdate cannot be older than 4 days');
+    }
+    if (params.enddate !== undefined) {
+      if (typeof params.enddate !== 'number' || !Number.isFinite(params.enddate)) {
+        throw new Error('enddate must be a unix seconds number');
+      }
+      if (params.enddate < params.startdate) {
+        throw new Error('enddate cannot be less than startdate');
+      }
+      if (params.enddate - params.startdate > ONE_DAY) {
+        throw new Error('Maximum allowed range is 1 day (86400 seconds)');
+      }
+    }
+    // Pass through directly (server enforces record limit of 500)
+    return this.request<SelectEntry[]>('sms', 'selectoutbox', params, cb as KavenegarCallback<SelectEntry[]>);
   }
   LatestOutbox(params: Record<string, any>, cb?: KavenegarCallback) {
     return this.request('sms', 'latestoutbox', params, cb);
