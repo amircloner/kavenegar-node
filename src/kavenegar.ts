@@ -102,6 +102,31 @@ export interface SelectEntry {
   [extra: string]: any; // forward compatibility
 }
 
+/**
+ * Parameters for LatestOutbox (آخرین ارسال ها)
+ * Persian Doc Summary:
+ *  - pagesize (اختیاری): تعداد آخرین رکوردها (حداکثر 500) – اگر ارسال نشود 500 در نظر گرفته می‌شود
+ *  - sender (اختیاری): محدود کردن به یک خط اختصاصی مشخص
+ * Notes:
+ *  - No pagination yet (future per docs)
+ *  - Security: Requires whitelisted IP else 407
+ *  - Server errors (per doc excerpt):
+ *      400 => invalid params (e.g. pagesize > 500 treated as missing / invalid)
+ *      407 => access denied (IP not set / not allowed)
+ *      412 => invalid sender (not owned by account)
+ * Client side validation implemented:
+ *  - pagesize if provided must be finite number between 1 and 500 inclusive.
+ *  - If omitted we will send pagesize=500 explicitly so user code gets consistent results.
+ */
+export interface LatestOutboxParams {
+  pagesize?: number;
+  sender?: string;
+  [extra: string]: any;
+}
+
+// Response entries of LatestOutbox share the same shape as SelectEntry.
+export interface LatestOutboxEntry extends SelectEntry {}
+
 export interface ReceiveParams {
   line?: string;
   isread?: boolean | number; // API might return 0/1
@@ -206,6 +231,7 @@ export type AnyParams =
   | PostalCodeParams
   | CallMakeTTSParams
   | SelectOutboxParams
+  | LatestOutboxParams
   | Record<string, any>;
 
 export class KavenegarApi {
@@ -416,7 +442,19 @@ export class KavenegarApi {
     return this.request<SelectEntry[]>('sms', 'selectoutbox', params, cb as KavenegarCallback<SelectEntry[]>);
   }
   LatestOutbox(params: Record<string, any>, cb?: KavenegarCallback) {
-    return this.request('sms', 'latestoutbox', params, cb);
+    // Provide strongly typed + validated version (backward compatible with loose call sites)
+    const p: LatestOutboxParams = { ...params };
+    if (typeof p.pagesize === 'undefined' || p.pagesize === null) {
+      p.pagesize = 500; // explicit default so behavior is predictable
+    } else {
+      if (typeof p.pagesize !== 'number' || !Number.isFinite(p.pagesize)) {
+        throw new Error('pagesize must be a number');
+      }
+      if (p.pagesize < 1 || p.pagesize > 500) {
+        throw new Error('pagesize must be between 1 and 500');
+      }
+    }
+    return this.request<LatestOutboxEntry[]>('sms', 'latestoutbox', p, cb as KavenegarCallback<LatestOutboxEntry[]>);
   }
   CountOutbox(params: Record<string, any>, cb?: KavenegarCallback) {
     return this.request('sms', 'countoutbox', params, cb);

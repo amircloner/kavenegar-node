@@ -436,6 +436,92 @@ Status request exceeds 500 ids limit
 
 Use `StatusLocalMessageid` when you stored your own `localid` per message and did not (or cannot) persist the generated `messageid`. Constraints: max 500 ids per call, only messages from last 12 hours are retrievable, missing/unknown local ids yield status 100 (invalid/expired). Response shape is identical to `Status`.
 
+## آخرین ارسال ها (LatestOutbox)
+
+این متد فهرست آخرین پیامک‌های ارسالی شما را (حداکثر 500 رکورد) برمی‌گرداند. در حال حاضر قابلیت Pagination در سمت سرویس پیاده‌سازی نشده و همیشه حداکثر همان تعداد آخر برمی‌گردد.
+
+### ورودی
+
+| پارامتر | وضعیت | نوع | توضیح |
+|---------|-------|-----|-------|
+| pagesize | اختیاری | Number | تعداد رکوردهای درخواستی (۱ تا ۵۰۰). اگر ارسال نشود کتابخانه مقدار 500 را ارسال می‌کند. |
+| sender | اختیاری | String | در صورت تعیین، فقط ارسال‌های مربوط به آن خط اختصاصی بازگردانده می‌شود. |
+
+نکات:
+1. اگر `pagesize` بزرگ‌تر از ۵۰۰ باشد در مستندات مقدار «نامعتبر» تلقی شده و خطای 400 ممکن است بازگردد؛ کتابخانه قبل از ارسال خطا می‌دهد.
+2. برای محدود کردن خروجی به یک خط خاص، پارامتر `sender` را مقداردهی کنید.
+3. نیاز به تنظیم IP مجاز در بخش تنظیمات امنیتی پنل دارید (در غیر اینصورت خطای 407).
+
+### خروجی نمونه
+
+```json
+{
+    "return": { "status": 200, "message": "تایید شد" },
+    "entries": [
+        {
+            "messageid": 30034577,
+            "message": "خدمات پیام کوتاه کاوه نگار",
+            "status": 10,
+            "statustext": "رسیده به گیرنده",
+            "sender": "30002626",
+            "receptor": "09*********",
+            "date": 1409533200,
+            "cost": 120
+        }
+    ]
+}
+```
+
+ساختار هر آیتم دقیقا همان فیلدهای متد `Select` را دارد: `messageid, message, status, statustext, sender, receptor, date, cost`.
+
+### نمونه استفاده (JavaScript)
+
+```js
+var Kavenegar = require('kavenegar');
+var api = Kavenegar.KavenegarApi({ apikey: 'your-api-key' });
+
+api.LatestOutbox({ pagesize: 200 }, function(entries, status, message){
+    console.log(status, message);
+    console.log(entries.length, 'records');
+});
+```
+
+### TypeScript / Promise
+
+```ts
+import { KavenegarApi, LatestOutboxEntry } from 'kavenegar/dist/kavenegar';
+
+const api = new KavenegarApi({ apikey: process.env.KAVENEGAR_API_KEY! });
+
+async function recent() {
+    const res = await api.LatestOutbox({ pagesize: 50, sender: '30002626' });
+    const list: LatestOutboxEntry[] = res.entries;
+    list.forEach(m => {
+        console.log(m.messageid, m.status, m.statustext);
+    });
+}
+recent();
+```
+
+### اعتبارسنجی سمت کتابخانه
+
+1. اگر `pagesize` مقداردهی نشود کتابخانه مقدار 500 را ارسال می‌کند.
+2. اگر `pagesize` خارج از بازه 1..500 باشد خطای `pagesize must be between 1 and 500` پرتاب می‌شود.
+3. اگر `pagesize` عدد نباشد خطای `pagesize must be a number` پرتاب می‌شود.
+
+### کدهای خطا (طبق مستند ارائه شده)
+
+| کد | توضیح |
+|----|-------|
+| 400 | پارامترها ناقص یا نامعتبر (مثلاً pagesize>500) |
+| 407 | دسترسی به اطلاعات برای شما امکان پذیر نیست (عدم تنظیم IP مجاز) |
+| 412 | ارسال کننده نامعتبر یا متعلق به شما نیست |
+
+### English Summary
+
+Fetch up to the latest 500 sent SMS records. Optional parameters: `pagesize` (1..500, default 500) and `sender` to filter by a specific dedicated line. Response entries contain: `messageid, message, status, statustext, sender, receptor, date, cost`. Requires whitelisted IP; errors: 400 (invalid params), 407 (access denied), 412 (invalid sender).
+
+
 
 ## Contribution
 
