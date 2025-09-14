@@ -295,6 +295,39 @@ export interface CountOutboxEntry {
 }
 
 /**
+ * Parameters for CountInbox (تعداد پیامک های دریافت شده)
+ * Persian Doc Summary:
+ *  - startdate (اجباری) UnixTime seconds: تاریخ شروع بازه
+ *  - enddate (اختیاری) UnixTime seconds: تاریخ پایان؛ اگر خالی باشد تا «هم اکنون» محاسبه می شود
+ *  - linenumber (اختیاری) String: خط اختصاصی؛ در صورت عدم ارسال آمار همه خطوط برگردانده می شود
+ *  - isread (اختیاری) Integer: 0 = خوانده نشده ها ، 1 = خوانده شده ها (اگر ارسال نشود همه پیامک ها لحاظ می شوند)
+ * Output (entries[0]): { startdate, enddate, sumcount }
+ * Constraints / Notes:
+ *  - حداکثر فاصله زمانی بین startdate و enddate = 1 روز (86400 ثانیه).
+ *  - startdate حداکثر تا 60 روز قبل مجاز است (60 * 86400 ثانیه).
+ *  - enddate نباید از startdate کوچکتر باشد.
+ *  - اگر enddate ارسال نشود و اختلاف اکنون با startdate > 1 روز باشد خطا برمی گردانیم (مگر اینکه سرویس رفتار متفاوتی اعمال کند؛ جهت سازگاری مشابه سایر متد ها محدود می کنیم).
+ *  - برای دریافت فقط پیام های خوانده نشده: isread=0.
+ * Failure / Server Errors:
+ *  - 417 => تاریخ نامعتبر یا enddate < startdate
+ */
+export interface CountInboxParams {
+  startdate: number; // required UnixTime seconds
+  enddate?: number; // optional UnixTime seconds
+  linenumber?: string; // optional dedicated line number
+  isread?: number | boolean; // optional filter: 0 unread, 1 read
+  [extra: string]: any;
+}
+
+// Response entry for CountInbox
+export interface CountInboxEntry {
+  startdate: number;
+  enddate: number;
+  sumcount: number;
+  [extra: string]: any;
+}
+
+/**
  * Parameters for Verify Lookup (اعتبار سنجی)
  * Doc (FA) summary:
  *  - receptor (الزامی): شماره گیرنده. بین المللی با 00 + کد کشور
@@ -357,6 +390,7 @@ export type AnyParams =
   | LatestOutboxParams
   | CountOutboxParams
   | LineBlockedListParams
+  | CountInboxParams
   | Record<string, any>;
 
 export class KavenegarApi {
@@ -719,8 +753,71 @@ export class KavenegarApi {
       cb as KavenegarCallback<ReceiveEntry[]>
     );
   }
-  CountInbox(params: Record<string, any>, cb?: KavenegarCallback) {
-    return this.request('sms', 'countinbox', params, cb);
+  /**
+   * CountInbox - تعداد پیامک های دریافت شده
+   * Returns aggregate number of received (inbox) messages over a time window.
+   * Client-side validation based on Persian documentation.
+   * Validations:
+   *  - startdate: required, unix seconds, not older than 60 days from now.
+   *  - enddate: optional; if provided must be >= startdate and within 1 day span.
+   *  - If enddate omitted we treat effective end as now and enforce (now - startdate) <= 86400.
+   *  - linenumber: optional non-empty string.
+   *  - isread: optional; accepts 0/1 or boolean. Converted to 0/1 if provided.
+   * Throws Error before network if constraints violated for consistency with other methods.
+   */
+  CountInbox(params: CountInboxParams, cb?: KavenegarCallback<CountInboxEntry[]>) {
+    if (!params || typeof params.startdate !== 'number' || !Number.isFinite(params.startdate)) {
+      throw new Error('startdate (unix seconds) is required');
+    }
+    const nowSec = Math.floor(Date.now() / 1000);
+    const SIXTY_DAYS = 60 * 86400; // 5184000 seconds
+    const ONE_DAY = 86400;
+    if (nowSec - params.startdate > SIXTY_DAYS) {
+      throw new Error('startdate cannot be older than 60 days');
+    }
+    let end = params.enddate;
+    if (end !== undefined) {
+      if (typeof end !== 'number' || !Number.isFinite(end)) {
+        throw new Error('enddate must be a unix seconds number');
+      }
+      if (end < params.startdate) {
+        throw new Error('enddate cannot be less than startdate');
+      }
+      if (end - params.startdate > ONE_DAY) {
+        throw new Error('Maximum allowed range is 1 day (86400 seconds)');
+      }
+    } else {
+      end = nowSec;
+      if (end - params.startdate > ONE_DAY) {
+        throw new Error('Maximum allowed range is 1 day (86400 seconds)');
+      }
+    }
+    let isread: number | undefined;
+    if (params.isread !== undefined) {
+      if (typeof params.isread === 'boolean') {
+        isread = params.isread ? 1 : 0;
+      } else if (params.isread === 0 || params.isread === 1) {
+        isread = params.isread;
+      } else {
+        throw new Error('isread must be 0, 1, false or true when provided');
+      }
+    }
+    if (params.linenumber !== undefined) {
+      if (typeof params.linenumber !== 'string' || !params.linenumber.trim()) {
+        throw new Error('linenumber must be a non-empty string when provided');
+      }
+    }
+    // Build payload (omit synthetic enddate if user omitted it so server uses its own "now")
+    const payload: Record<string, any> = { startdate: params.startdate };
+    if (params.enddate !== undefined) payload.enddate = params.enddate;
+    if (params.linenumber !== undefined) payload.linenumber = params.linenumber;
+    if (isread !== undefined) payload.isread = isread;
+    return this.request<CountInboxEntry[]>(
+      'sms',
+      'countinbox',
+      payload,
+      cb as KavenegarCallback<CountInboxEntry[]>
+    );
   }
   CountPostalCode(params: PostalCodeParams, cb?: KavenegarCallback) {
     return this.request('sms', 'countpostalcode', params, cb);
