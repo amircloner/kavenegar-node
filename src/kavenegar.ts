@@ -402,6 +402,20 @@ export interface CallMakeTTSEntry {
   [extra: string]: any;
 }
 
+// ---------------- Account Info (اطلاعات حساب کاربری) ----------------
+/**
+ * Response entry shape for account/info endpoint.
+ * remaincredit: اعتبار باقی مانده (ریال)
+ * expiredate: UnixTime انقضاء (جنبه امنیتی؛ نگران انقضاء حساب نباشید)
+ * type: نوع حساب (master | child)
+ */
+export interface AccountInfoEntry {
+  remaincredit: number;
+  expiredate: number; // UnixTime (seconds)
+  type: 'master' | 'child' | string; // keep string fallback for forward compatibility
+  [extra: string]: any;
+}
+
 // Utility union for parameter objects accepted by request wrapper
 export type AnyParams =
   | SendParams
@@ -859,7 +873,9 @@ export class KavenegarApi {
     return this.request('verify', 'lookup', params, cb);
   }
   AccountInfo(params: Record<string, any>, cb?: KavenegarCallback) {
-    return this.request('account', 'info', params, cb);
+    // Endpoint does not require parameters; allow passing empty object or omitted.
+    const payload = params || {};
+    return this.request<AccountInfoEntry>('account', 'info', payload, cb as KavenegarCallback<AccountInfoEntry>);
   }
   AccountConfig(params: AccountConfigParams, cb?: KavenegarCallback) {
     return this.request('account', 'config', params, cb);

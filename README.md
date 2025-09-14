@@ -364,6 +364,78 @@ Retrieve paginated list of subscriber numbers that have blocked receiving SMS fr
 
 ---
 
+## دریافت اطلاعات حساب کاربری (AccountInfo)
+
+این متد برای دریافت اطلاعات پایه حساب (یا زیرحساب های ایجاد شده توسط شما) استفاده می‌شود. مهم‌ترین فیلدهای خروجی «اعتبار باقی مانده» و «تاریخ انقضاء» هستند.
+
+### آدرس (URL)
+
+```text
+https://api.kavenegar.com/v1/{API-KEY}/account/info.json
+```
+
+### خروجی
+
+| فیلد | نوع | توضیح |
+|------|-----|-------|
+| remaincredit | Long | اعتبار باقی مانده (ریال) |
+| expiredate | UnixTime | تاریخ انقضاء (صرفاً جنبه امنیتی) |
+| type | String | نوع حساب: master یا child |
+
+یادداشت‌ها:
+
+1. مقدار remaincredit بر حسب ریال است.
+2. expiredate بیشتر برای کنترل های داخلی امنیتی است؛ نگران متوقف شدن حساب با رسیدن این تاریخ نباشید.
+3. اگر از زیرحساب‌ها استفاده می‌کنید (child) نوع حساب را می‌توانید تشخیص دهید.
+
+### نمونه پاسخ اطلاعات حساب (Sample AccountInfo Response)
+
+```json
+{
+    "return": { "status": 200, "message": "تایید شد" },
+    "entries": {
+        "remaincredit": 1500000,
+        "expiredate": 13548889,
+        "type": "master"
+    }
+}
+```
+
+### مثال استفاده AccountInfo (Promise / TypeScript)
+
+```ts
+import { KavenegarApi, AccountInfoEntry } from 'kavenegar/dist/kavenegar';
+const api = new KavenegarApi({ apikey: process.env.KAVENEGAR_API_KEY! });
+
+async function showAccount(){
+    const res = await api.AccountInfo({}); // پارامتر خاصی لازم نیست
+    const info: AccountInfoEntry = res.entries;
+    console.log('Remain Credit (Rial):', info.remaincredit);
+    console.log('Expire Date (unix):', info.expiredate, 'Type:', info.type);
+}
+showAccount();
+```
+
+### مثال ساده AccountInfo (Callback / JavaScript)
+
+```js
+var Kavenegar = require('kavenegar');
+var api = Kavenegar.KavenegarApi({ apikey: 'your-api-key' });
+api.AccountInfo({}, function(entry, status, message){
+    console.log(status, message);
+    if(entry){
+        console.log('Remain Credit:', entry.remaincredit);
+        console.log('Expire:', entry.expiredate, 'Type:', entry.type);
+    }
+});
+```
+
+### English Summary (AccountInfo)
+
+Fetch base account information: remaining credit (in Rial), security-oriented expire date (Unix time), and account type (master or child). No parameters required. Use to monitor balance before sending bulk messages or to display billing info in dashboards.
+
+---
+
 #### پارامترهای متد Send
 
 | پارامتر | وضعیت | نوع | توضیح |
