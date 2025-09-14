@@ -281,6 +281,22 @@ export class KavenegarApi {
     const normalized = this.normalizeStatusParams(params, 'messageid');
     return this.request<StatusEntry[]>('sms', 'status', normalized, cb);
   }
+  /**
+   * Fetch delivery status list using previously supplied localid values instead of messageid.
+   * Usage scenarios:
+   *  - When your data model cannot persist the service generated messageid
+   *  - When you prefer to correlate by your own local identifiers
+   * Input forms accepted (same flexibility as Status):
+   *  - { localid: 'loc1,loc2,loc3' }
+   *  - { localid: ['loc1','loc2'] }
+   *  - { localid: 12345 } (numeric id)
+   * Constraints / Notes (per official docs):
+   *  - Maximum 500 local ids per request (library enforces – throws before network if exceeded)
+   *  - Only messages of last 12 hours are queryable by localid (older => status may be 100 invalid)
+   *  - If a provided localid was NOT sent (or you never passed a localid when sending) returned status = 100 (invalid)
+   *  - Response structure equals Status: array of { messageid, localid?, status, statustext }
+   *  - Server error 414 when more than allowed ids are submitted (defensively prevented here)
+   */
   StatusLocalMessageid(params: StatusParams, cb?: KavenegarCallback) {
     const normalized = this.normalizeStatusParams(params, 'localid');
     return this.request<StatusEntry[]>('sms', 'statuslocalmessageid', normalized, cb);

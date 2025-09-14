@@ -383,6 +383,60 @@ const res = await api.StatusLocalMessageid({ localid: ['loc1','loc2'] });
 
 > توجه: جدول کامل کدهای وضعیت در مستندات رسمی کاوه نگار موجود است؛ برخی کدهای متداول: 1 (در صف)، 4 (ارسال به مخابرات)، 10 (رسیده به گیرنده)، 100 (شناسه نامعتبر/منقضی).
 
+### دریافت وضعیت با شناسه محلی (StatusLocalMessageid / localid)
+
+اگر هنگام ارسال پیامک‌ها پارامتر `localid` (در متد `Send`) یا آرایه `localmessageids` (در متد `SendArray`) را ثبت کرده باشید، می‌توانید بدون دانستن `messageid` وضعیت را از طریق همان شناسه‌های محلی بازیابی کنید.
+
+نکات مهم طبق مستندات رسمی:
+
+1. فقط پیام‌های حداکثر ۱۲ ساعت گذشته توسط `localid` قابل پیگیری هستند (قدیمی‌تر → `status = 100`).
+2. در هر فراخوانی حداکثر 500 شناسه مجاز است؛ بیشتر → خطای 414 (کتابخانه پیش از ارسال خطا می‌دهد).
+3. اگر در زمان ارسال برای پیامی `localid` تعیین نکرده باشید، در پاسخ استعلام با آن شناسه مقدار `status = 100` (نامعتبر) بازگردانده می‌شود.
+4. ساختار پاسخ دقیقاً همانند متد `Status` است (فیلدهای `messageid`, `status`, `statustext`) و ممکن است `localid` هم تکرار شود.
+5. فعال‌سازی «ارسال وضعیت به URL» (Status Callback URL) از بخش تنظیمات خطوط همچنان قابل استفاده است.
+
+#### مثال درخواست (REST)
+
+```text
+GET https://api.kavenegar.com/v1/{API-KEY}/sms/statuslocalmessageid.json?localid=450
+```
+
+#### مثال پاسخ
+
+```json
+{
+    "return": { "status": 200, "message": "تایید شد" },
+    "entries": [
+        { "messageid": 85463238, "localid": "450", "status": 10, "statustext": "رسیده به گیرنده" }
+    ]
+}
+```
+
+#### استفاده در کتابخانه (JavaScript / TypeScript)
+
+```ts
+// Single local id
+await api.StatusLocalMessageid({ localid: '450' });
+
+// Comma separated
+await api.StatusLocalMessageid({ localid: 'loc1,loc2,loc3' });
+
+// Array form
+await api.StatusLocalMessageid({ localid: ['loc1','loc2','loc3'] });
+```
+
+#### نکات پردازشی در کتابخانه
+
+کتابخانه به طور خودکار ورودی را نرمال‌سازی می‌کند و در صورت عبور از سقف 500 شناسه خطای زیر را پیش از ارسال درخواست پرتاب می‌کند:
+
+```text
+Status request exceeds 500 ids limit
+```
+
+#### English Summary
+
+Use `StatusLocalMessageid` when you stored your own `localid` per message and did not (or cannot) persist the generated `messageid`. Constraints: max 500 ids per call, only messages from last 12 hours are retrievable, missing/unknown local ids yield status 100 (invalid/expired). Response shape is identical to `Status`.
+
 
 ## Contribution
 
