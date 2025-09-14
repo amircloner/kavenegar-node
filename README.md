@@ -1,89 +1,406 @@
-# kavenegar-node
+<div align="center">
 
+# Kavenegar Node.js SDK
 
-# <a href="http://kavenegar.com/rest.html">Kavenegar RESTful API Document</a>
-If you need to future information about API document Please visit RESTful Document
+High level, fully typed (TypeScript) SDK for the [Kavenegar](https://kavenegar.com) SMS / Voice / Verify REST API.
+
+</div>
+
+> این کتابخانه نسخه مدرن و به‑روز شده کیت توسعه کاوه نگار برای Node.js است و اکثر متدهای عمومی (ارسال، دریافت، گزارش وضعیت، اینباکس صفحه بندی شده، پیام صوتی TTS، تنظیمات حساب، آمار ارسال/دریافت، ارسال گروهی، اعتبارسنجی (Lookup) و …) را پوشش می‌دهد.
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+    - [TypeScript / ESM](#typescript--esm)
+    - [CommonJS](#commonjs)
+- [Usage Examples](#usage-examples)
+    - [Send Single SMS (Send)](#send-single-sms-send)
+    - [Bulk Parallel Send (SendArray)](#bulk-parallel-send-sendarray)
+    - [Verify / OTP (VerifyLookup)](#verify--otp-verifylookup)
+    - [Receive Inbox (Receive)](#receive-inbox-receive)
+    - [Paged Inbox (InboxPaged)](#paged-inbox-inboxpaged)
+    - [Blocked Numbers (LineBlockedList)](#blocked-numbers-lineblockedlist)
+    - [Delivery Status (Status)](#delivery-status-status)
+    - [Delivery Status by Local Id (StatusLocalMessageid)](#delivery-status-by-local-id-statuslocalmessageid)
+    - [Select (Detailed Sent Messages)](#select-detailed-sent-messages)
+    - [SelectOutbox (Sent List Window)](#selectoutbox-sent-list-window)
+    - [LatestOutbox](#latestoutbox)
+    - [CountOutbox (Sent Aggregates)](#countoutbox-sent-aggregates)
+    - [CountInbox (Received Aggregates)](#countinbox-received-aggregates)
+    - [StatusByReceptor](#statusbyreceptor)
+    - [AccountInfo](#accountinfo)
+    - [AccountConfig](#accountconfig)
+    - [Voice TTS Call (CallMakeTTS)](#voice-tts-call-callmaketts)
+    - [Postal Code Targeting](#postal-code-targeting-countpostalcode--sendbypostalcode)
+    - [Cancel Scheduled Messages](#cancel-scheduled-messages)
+- [Parameter Validation & Errors](#parameter-validation--errors)
+- [TypeScript Typings](#typescript-typings)
+- [FAQ](#faq)
+- [Contributing](#contributing)
+- [Persian Guide / راهنمای فارسی](#persian-guide--راهنمای-فارسی)
+
+## Features
+
+- Promise based, still supports legacy callbacks
+- Rich TypeScript definitions for params and responses
+- Client‑side validation mirroring official constraints (id limits, date windows, array length, etc.)
+- Supports: Send, SendArray, VerifyLookup (OTP), Receive, InboxPaged, LineBlockedList, Status, StatusLocalMessageid, Select, SelectOutbox, LatestOutbox, CountOutbox, CountInbox, StatusByReceptor, AccountInfo, AccountConfig, CallMakeTTS (Voice TTS), Postal Code (CountPostalCode / SendByPostalCode), Cancel
+- Normalizes flexible inputs (arrays, comma separated strings, booleans for 0/1)
+- Safe: rejects oversize batches (e.g. >500 ids)
+- Zero production dependencies
 
 ## Installation
-<p>
-First of all, You need to make an account on Kavenegar from <a href="https://panel.kavenegar.com/Client/Membership/Register">Here</a>
-</p>
-<p>
-After that you just need to pick API-KEY up from <a href="http://panel.kavenegar.com/Client/setting/index">My Account</a> section.
-You can download the Node SDK <a href="https://github.com/KaveNegar/kavenegar-node.git">Here</a> or just pull it.
-Anyway there is good tutorial about <a href="http://gun.io/blog/how-to-github-fork-branch-and-pull-request/">Pull  request</a>
-</p>
-<p> For installing Kavenegar  use this command via npm </p>
 
-```node
+```bash
 npm install kavenegar
+# or
+yarn add kavenegar
 ```
 
+You need an API key: create an account and obtain the key from the panel.
 
-If you don't have npm you can easily install it from  [npm website](https://www.npmjs.com/)
+## Quick Start
 
+### TypeScript / ESM
 
-## Usage
+```ts
+import { KavenegarApi } from 'kavenegar';
 
-Well, There is examples to Send SMS by node below.
+const api = new KavenegarApi({ apikey: process.env.KAVENEGAR_API_KEY! });
 
-Simple Send:
-```node
-var Kavenegar = require('kavenegar');
-var api = Kavenegar.KavenegarApi({
-    apikey: 'your apikey here'
-});
-api.Send({
-        message: "خدمات پیام کوتاه کاوه نگار",
-        sender: "10004346",
-        receptor: "09123456789,09367891011",
-        // زمان‌بندی ارسال (یونیکس تایم – اختیاری)
-        // date: 1734000000,
-        // شناسه محلی برای جلوگیری از ارسال تکراری (به تعداد گیرنده ها)
-        // localid: "id1,id2",
-        // مخفی کردن شماره گیرنده در گزارش ها
-        hide: 1,
-        // تگ تحلیلی تعریف شده در پنل
-        tag: "register-flow"
-    },
-    function(response, status) {
-        console.log(response);
-        console.log(status);
+async function run(){
+    const res = await api.Send({
+        receptor: '09123456789',
+        message: 'Hello from Kavenegar Node SDK',
+        sender: '10004346'
     });
-/*
-sample output
+    console.log(res.return.status, res.entries);
+}
+run();
+```
+
+### CommonJS
+
+```js
+const { KavenegarApi } = require('kavenegar');
+const api = new KavenegarApi({ apikey: 'your-api-key' });
+api.Send({ receptor: '09123456789', message: 'Hi', sender: '10004346' }, (entries, status, message) => {
+    console.log(status, message, entries);
+});
+```
+
+---
+
+## Usage Examples
+
+### Send Single SMS (Send)
+
+```ts
+await api.Send({
+    receptor: '09123456789,09367891011',
+    message: 'خدمات پیام کوتاه کاوه نگار',
+    sender: '10004346',
+    // date: 1734000000,  // optional future unix seconds
+    // localid: 'id1,id2',
+    hide: 1,
+    tag: 'register-flow'
+});
+```
+
+Sample (truncated) response shape:
+
+```json
 {
-    "return":
-    {
-        "status":200,
-        "message":"تایید شد"
-    },
-    "entries": 
-    [
-        {
-            "messageid":8792343,
-            "message":"خدمات پیام کوتاه کاوه نگار",
-            "status":1,
-            "statustext":"در صف ارسال",
-            "sender":"10004346",
-            "receptor":"09123456789",
-            "date":1356619709,
-            "cost":120
-        },
-        {
-            "messageid":8792344,
-            "message":"خدمات پیام کوتاه کاوه نگار",
-            "status":1,
-            "statustext":"در صف ارسال",
-            "sender":"10004346",
-            "receptor":"09367891011",
-            "date":1356619709,
-            "cost":120
-        }
+    "return": { "status":200, "message":"تایید شد" },
+    "entries": [
+        {"messageid":8792343,"status":1,"statustext":"در صف ارسال","sender":"10004346","receptor":"09123456789","date":1356619709,"cost":120}
     ]
 }
-*/
 ```
+
+Key params: receptor (csv), message, optional sender/date/localid/hide/tag.
+
+### Bulk Parallel Send (SendArray)
+
+Send N distinct messages from N senders to N receptors (arrays must be equal length):
+
+```ts
+await api.SendArray({
+    receptor: ['09123456789','09123456780'],
+    sender:   ['10008445','10008445'],
+    message:  ['پیام اول','پیام دوم'],
+    hide: true,
+    tag: 'campaign-a'
+});
+```
+
+Throws `LengthMismatch` before network if mandatory arrays differ.
+
+### Verify / OTP (VerifyLookup)
+
+```ts
+await api.VerifyLookup({
+    receptor: '09361234567',
+    template: 'registerverify',
+    token: '852596',
+    // token2, token3, token10, token20, type: 'sms' | 'call', tag
+});
+```
+
+### Receive Inbox (Receive)
+
+Fetch unread inbound messages until drained (max 100 per call; unread messages become read after fetch):
+
+```ts
+async function drain(line: string){
+    let collected: any[] = [];
+    while(true){
+        const res = await api.Receive({ linenumber: line, isread: 0 });
+        const batch = res.entries || [];
+        collected = collected.concat(batch);
+        if(batch.length < 100) break;
+    }
+    return collected;
+}
+```
+
+### Paged Inbox (InboxPaged)
+
+```ts
+const first = await api.InboxPaged({ linenumber: '3000202030', isread: 0, pagenumber: 1 });
+console.log(first.metadata);
+```
+
+`metadata` => `{ totalcount, currentpage, totalpages, pagesize }` (pagesize typically 200). Keep requesting while `currentpage < totalpages`.
+
+### Blocked Numbers (LineBlockedList)
+
+```ts
+const blocked = await api.LineBlockedList({ linenumber: '30002225', pagenumber: 1 });
+```
+
+Loop pages while `currentpage < totalpages`.
+
+### Delivery Status (Status)
+
+```ts
+const r = await api.Status({ messageid: [85463238, 85463239] });
+```
+
+Max 500 ids per call. Accepts single id, array, or csv string.
+
+### Delivery Status by Local Id (StatusLocalMessageid)
+
+```ts
+await api.StatusLocalMessageid({ localid: 'loc1,loc2,loc3' });
+```
+
+Only last ~12 hours; still max 500 ids.
+
+### Select (Detailed Sent Messages)
+
+Richer payload (includes text, receptor, cost, date) vs `Status`:
+
+```ts
+await api.Select({ messageid: '85463238,85463239' });
+```
+
+### SelectOutbox (Sent List Window)
+
+List sent messages in a constrained time window (startdate required, <=4 days old, span <=1 day):
+
+```ts
+await api.SelectOutbox({ startdate: Math.floor(Date.now()/1000) - 3600 }); // last hour
+```
+
+### LatestOutbox
+
+Fetch latest N (1..500, default 500) sent records (no pagination):
+
+```ts
+await api.LatestOutbox({ pagesize: 100 });
+```
+
+### CountOutbox (Sent Aggregates)
+
+```ts
+const stats = await api.CountOutbox({ startdate: Math.floor(Date.now()/1000) - 1800 });
+```
+
+Returns one row with `sumpart`, `sumcount`, `cost`.
+
+### CountInbox (Received Aggregates)
+
+```ts
+const recStats = await api.CountInbox({ startdate: Math.floor(Date.now()/1000) - 3600 });
+```
+
+Constraints: startdate <= 60 days old; span <= 1 day.
+
+### StatusByReceptor
+
+```ts
+await api.StatusByReceptor({ receptor: '09123456789', startdate: Math.floor(Date.now()/1000) - 3600 });
+```
+
+### AccountInfo
+
+```ts
+const info = await api.AccountInfo({});
+console.log(info.entries.remaincredit);
+```
+
+### AccountConfig
+
+Fetch current or update selected fields:
+
+```ts
+await api.AccountConfig({ defaultsender: '10004346', apilogs: 'justfaults', debugmode: true });
+```
+
+Accepted toggles: `enabled | disabled | justfaults (apilogs) | true/false | 1/0` (library normalizes).
+
+### Voice TTS Call (CallMakeTTS)
+
+Text to speech outbound call (1..200 receptors):
+
+```ts
+await api.CallMakeTTS({
+    receptor: '09123456789,09350000000',
+    message: 'کد تایید شما ۱ ۲ ۳ ۴',
+    // date, localid, repeat (0..5), tag
+});
+```
+
+### Postal Code Targeting (CountPostalCode / SendByPostalCode)
+
+Endpoints are exposed as low level helpers (no extra validation yet):
+
+```ts
+await api.CountPostalCode({ postalcode: '1234567890' });
+await api.SendByPostalCode({ postalcode: '1234567890', sender: '10004346' });
+```
+
+### Cancel Scheduled Messages
+
+If you scheduled messages (`date` in the future) you may attempt cancellation (API limitations apply):
+
+```ts
+await api.Cancel({ messageid: '85463238,85463239' });
+```
+
+---
+
+## Parameter Validation & Errors
+
+The SDK performs early checks and throws before network when:
+
+| Scenario | Validation |
+|----------|------------|
+| Status / Select ids | >500 ids => Error `Status request exceeds 500 ids limit` |
+| SendArray | Unequal array lengths => `LengthMismatch` |
+| Date windows | Out-of-range spans (e.g. CountOutbox >1 day) => descriptive Error |
+| InboxPaged | enddate < startdate or span > 2 days => Error |
+| LatestOutbox | pagesize not 1..500 => Error |
+| CountInbox/Outbox | startdate too old or span exceeded => Error |
+| CallMakeTTS | >200 receptors, invalid repeat/date/tag => Error |
+| AccountConfig | Invalid toggle or malformed field => Error |
+
+Server still may return documented status codes (e.g. 400, 407, 412, 417, 418, 424, 607). They appear under `response.return.status` with a localized `message`.
+
+### Common Status Codes (Selected)
+
+| Code | Meaning (fa/en summary) |
+|------|-------------------------|
+| 200 | Success / تایید شد |
+| 400 | Invalid / missing params |
+| 407 | Access denied (IP / permissions) |
+| 412 | Invalid sender line |
+| 414 | Too many receptors / ids |
+| 417 | Invalid date range |
+| 418 | Insufficient credit |
+| 424 | Template not found (Verify) |
+| 428 | Call not possible (Verify type=call) |
+| 431 | Invalid code structure (Verify) |
+| 432 | Missing token placeholder in template |
+| 607 | Invalid tag |
+
+## TypeScript Typings
+
+All exported interfaces live in the distributed `d.ts` (`SendParams`, `SendArrayParams`, `StatusEntry`, `ReceiveEntry`, `InboxPagedMetadata`, `CountOutboxEntry`, `LineBlockedNumberEntry`, `AccountInfoEntry`, `AccountConfigEntry`, `CallMakeTTSEntry`, etc.).
+
+Typical generic response shape:
+
+```ts
+interface KavenegarApiResponse<TEntries, TMeta = any> {
+    entries: TEntries;
+    return: { status: number; message: string };
+    metadata?: TMeta; // only for paged responses
+}
+```
+
+All methods return `Promise<KavenegarApiResponse<...>>` when callback not supplied.
+
+## FAQ
+
+**Q: Why do some methods limit ids or time windows?**  
+Mirrors upstream REST service constraints (performance & data retention); enforcing early saves a round trip.
+
+**Q: Do I need to import from `dist/`?**  
+No. Use `import { KavenegarApi } from 'kavenegar';` — the package `exports` map resolves to the built file.
+
+**Q: How do I handle localized (Persian) status texts?**  
+The service returns `statustext` in Persian. You can map codes (`status`) to your own translations if needed.
+
+**Q: Are retries implemented?**  
+No automatic retries; implement idempotency via your `localid` and retry logic of choice.
+
+## Contributing
+
+Issues, pull requests and documentation improvements are welcome.  
+Email: <support@kavenegar.com>  
+GitHub Issues: <https://github.com/KaveNegar/kavenegar-node/issues>
+
+Steps:
+1. Fork & clone
+2. `npm install`
+3. Make changes (edit TypeScript in `src/`)
+4. `npm run build`
+5. Open PR
+
+## Persian Guide / راهنمای فارسی
+
+بخش عمده مثال‌ها دو زبانه در بالا آمده است. برای جزئیات کامل فارسی می‌توانید به مستندات رسمی مراجعه کنید:
+
+- مستند وب سرویس: <http://kavenegar.com/rest.html>
+- عضویت / دریافت کلید: <https://panel.kavenegar.com/Client/Membership/Register>
+- آموزش ارسال پیامک (SDK): <http://kavenegar.com/sdk.html>
+
+### نکات کلیدی فارسی
+
+- `receptor` می‌تواند لیست جدا شده با کاما باشد.
+- برای جلوگیری از ارسال تکراری از `localid` (تک) یا `localmessageids` (آرایه در SendArray) استفاده کنید.
+- پیام‌های دریافتی با `Receive` در حالت `isread=0` پس از واکشی خوانده می‌شوند.
+- حداکثر 500 شناسه در متدهای وضعیت (Status, Select, ...) و حداکثر 200 شماره در ارسال گروهی صوتی یا آرایه‌ای.
+- بازه‌های زمانی را مطابق توضیحات هر متد (۱ روز، ۲ روز، ۴ روز، ۶۰ روز) رعایت کنید؛ کتابخانه خطا می‌دهد.
+- برای Voice TTS از متد `CallMakeTTS` استفاده کنید (تلفن گویا ساده – متن تبدیل به گفتار).
+
+## Legacy Credits
+
+Original work & earlier versions by community contributors. This revision modernizes the codebase with TypeScript and extended documentation.
+
+---
+
+<div dir='rtl' align='center'>
+اگر در استفاده از کتابخانه مشکلی یا پیشنهادی داشتید با Pull Request یا ایمیل به <a href="mailto:support@kavenegar.com?Subject=SDK">support@kavenegar.com</a> ما را خوشحال کنید.
+<br/><br/>
+<a href="http://kavenegar.com"><img alt="Kavenegar" src="http://kavenegar.com/public/images/logo.png" width="220"/></a>
+<br/>
+<a href="http://kavenegar.com">kavenegar.com</a>
+</div>
+
 
 ## دریافت پیامک های ورودی (Receive Inbox)
 
