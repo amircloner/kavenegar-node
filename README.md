@@ -224,25 +224,91 @@ sample output
 
 
 
-Send Array:
+### ارسال گروهی (SendArray)
 
+این متد برای زمانی است که بخواهید چند «پیام»، از چند «خط»، به چند «گیرنده» ارسال کنید و هر سه آرایه با هم متناظر باشند.
+همه آرایه‌های `receptor` و `sender` و `message` باید طول یکسان داشته باشند. در صورت استفاده از `type` یا `localmessageids` طول آنها هم باید برابر باشد. فراخوانی حتماً باید با متد POST انجام شود (کتابخانه به صورت پیش‌فرض POST است).
+
+#### مثال ساده (CommonJS)
 ```node
 var Kavenegar = require('kavenegar');
-var api = Kavenegar.KavenegarApi({
-    apikey: 'your-apikey'
-});
-api.SendArray(
-{
-        message: '["کاوه نگار", "وب سرویس کاوه نگار"]',
-        sender: '["10008445","10008445"]',
-        receptor: '["09123456789","09123456781"]'
-}
-,
-    function(response, status) {
-        console.log(response);
-        console.log(status);
+var api = Kavenegar.KavenegarApi({ apikey: 'your-apikey' });
+api.SendArray({
+        receptor: ['09123456789','09123456780','09123456781'],
+        sender:   ['10008445','10008445','10008446'],
+        message:  ['پیام اول','پیام دوم','پیام سوم'],
+        // مقادیر اختیاری:
+        // date: 1734000000,
+        // type: [1,1,1],
+        // localmessageids: ['loc1','loc2','loc3'],
+        // hide: 1,
+        // tag: 'bulk-campaign'
+}, function(entries, status, statustext){
+        console.log(status, statustext);
+        console.log(entries);
 });
 ```
+
+#### TypeScript / Promise
+```ts
+import { KavenegarApi, SendArrayParams } from 'kavenegar/dist/kavenegar';
+
+const api = new KavenegarApi({ apikey: process.env.KAVENEGAR_API_KEY! });
+
+async function bulk() {
+    const params: SendArrayParams = {
+        receptor: ['09123456789','09123456780'],
+        sender:   ['10008445','10008445'],
+        message:  ['Hello #1','Hello #2'],
+        hide: true,
+        tag: 'campaign-a'
+    };
+    const res = await api.SendArray(params);
+    console.log(res.return.status, res.entries);
+}
+bulk();
+```
+
+نمونه پاسخ سرور (نمونه فرضی):
+```json
+{
+    "return":{"status":200,"message":"تایید شد"},
+    "entries":[
+        {"messageid":8792343,"message":"پیام اول","status":1,"statustext":"در صف ارسال","sender":"10008445","receptor":"09123456789","date":1356619709,"cost":120},
+        {"messageid":8792344,"message":"پیام دوم","status":1,"statustext":"در صف ارسال","sender":"10008445","receptor":"09123456780","date":1356619709,"cost":120}
+    ]
+}
+```
+
+#### پارامترها
+
+| نام | الزامی | نوع | توضیح |
+|-----|--------|-----|-------|
+| receptor | بله | Array<String> | لیست شماره گیرندگان (هر کدام موبایل) |
+| sender | بله | Array<String> | لیست شماره خطوط ارسال کننده |
+| message | بله | Array<String> | لیست متن پیام ها (به همان ترتیب گیرنده) |
+| date | خیر | UnixTime | زمان ارسال یکسان برای همه پیام ها |
+| type | خیر | Array<Number/String> | نوع پیام (فقط خطوط 3000) |
+| localmessageids | خیر | Array<String/Number> | شناسه های محلی برای جلوگیری از ارسال تکراری |
+| hide | خیر | 0/1/Boolean | 1 یا true => عدم نمایش شماره گیرنده در گزارش ها |
+| tag | خیر | String | تگ ثبت شده در پنل (فقط حروف/اعداد انگلیسی، - و _ ، حداکثر 200 کاراکتر) |
+
+#### نکات / یادداشت
+1. طول سه آرایه اجباری باید برابر باشد؛ در غیر اینصورت خطای 419 (سمت سرور) یا خطای LengthMismatch (سمت کتابخانه) رخ می‌دهد.
+2. در صورت تکرار `localmessageids` قبلاً استفاده شده، ارسال جدید انجام نمی‌شود و همان رکورد بازگردانده می‌شود.
+3. مقدار `hide=1` شماره گیرنده را در پنل مخفی می‌کند.
+4. قبل از استفاده از `tag` باید در پنل تگ ایجاد شود؛ در غیر اینصورت خطا 607.
+
+#### کدهای خطا (منتخب)
+| کد | توضیح |
+|----|-------|
+| 405 | متد غیرمجاز (باید POST باشد) |
+| 412 | تعداد گیرندگان بیش از 200 |
+| 417 | تاریخ نامعتبر |
+| 418 | اعتبار کافی نیست |
+| 419 | اندازه آرایه های پیام / گیرنده / ارسال کننده برابر نیست |
+| 607 | نام تگ اشتباه است |
+
 ## Contribution
 
 Bug fixes, docs, and enhancements welcome! Please let us know <a href="mailto:support@kavenegar.com?Subject=SDK" target="_top">support@kavenegar.com</a>

@@ -48,6 +48,24 @@ export interface SendParams {
   tag?: string;
 }
 
+/**
+ * Parameters for bulk (array) send (sendarray)
+ * According to FA docs: all array fields must have identical lengths and the request MUST be POST.
+ * The REST endpoint expects JSON array strings (e.g. '["09..","09.."]') OR standard form arrays (we send JSON string for clarity/compatibility).
+ */
+export interface SendArrayParams {
+  receptor: string[]; // Array of recipient numbers (size N)
+  sender: string[]; // Array of sender lines (size N)
+  message: string[]; // Array of messages (size N)
+  date?: number; // Unix time schedule (applies to all messages) optional
+  type?: Array<number | string>; // Message type array (only for 3000 lines) optional
+  localmessageids?: Array<string | number>; // Local ids per message (size N) optional
+  hide?: 0 | 1 | boolean; // If 1 hides receptors in panel
+  tag?: string; // Optional analytics tag (must be pre-created in panel)
+  // Allow forward compatibility with additional keys
+  [extra: string]: any;
+}
+
 export interface StatusParams {
   messageid?: string | number | Array<string | number>;
   localid?: string | number | Array<string | number>;
@@ -192,8 +210,38 @@ export class KavenegarApi {
   Send(params: SendParams, cb?: KavenegarCallback) {
     return this.request('sms', 'send', params, cb);
   }
-  SendArray(params: Record<string, any>, cb?: KavenegarCallback) {
-    return this.request('sms', 'sendarray', params, cb);
+  /**
+   * Send multiple distinct messages from potentially different senders to different receptors.
+   * All array fields (receptor, sender, message) MUST have the same length. Optional parallel arrays (type, localmessageids) must match if provided.
+   * This helper accepts plain arrays and internally converts them to JSON array string values as accepted by the REST API.
+   * Errors (client-side) thrown BEFORE request:
+   *  - LengthMismatch: when mandatory arrays differ in size
+   *  - OptionalLengthMismatch: when optional arrays provided but size differs
+   */
+  SendArray(params: SendArrayParams, cb?: KavenegarCallback) {
+    const { receptor, sender, message } = params;
+    if (!Array.isArray(receptor) || !Array.isArray(sender) || !Array.isArray(message)) {
+      throw new Error('receptor, sender and message must be arrays');
+    }
+    const n = receptor.length;
+    if (!(sender.length === n && message.length === n)) {
+      throw new Error('LengthMismatch: receptor, sender and message arrays must be equal size');
+    }
+    const { type, localmessageids } = params;
+
+    // Convert arrays to JSON string expected by API (doc sample uses JSON arrays)
+    const payload: Record<string, any> = {
+      receptor: JSON.stringify(receptor),
+      sender: JSON.stringify(sender),
+      message: JSON.stringify(message)
+    };
+    if (params.date) payload.date = params.date;
+    if (params.tag) payload.tag = params.tag;
+    if (typeof params.hide !== 'undefined') payload.hide = params.hide ? 1 : 0;
+    if (type) payload.type = JSON.stringify(type);
+    if (localmessageids) payload.localmessageids = JSON.stringify(localmessageids);
+
+    return this.request('sms', 'sendarray', payload, cb);
   }
   Status(params: StatusParams, cb?: KavenegarCallback) {
     return this.request('sms', 'status', params, cb);
