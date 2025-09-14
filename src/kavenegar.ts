@@ -370,11 +370,36 @@ export interface PostalCodeParams {
   sender?: string;
 }
 
+/**
+ * Parameters for voice call (call/maketts) – تماس صوتی
+ * Doc (FA) summary provided:
+ *  - receptor (اجباری) String: یک یا چند شماره گیرنده جدا شده با ',' (حداکثر 200 شماره – خطای 414 در صورت بیشتر)
+ *  - message (اجباری) String: متن تبدیل به گفتار (UTF-8 encoded). Caller should ensure proper URL encoding at transport layer (handled by querystring for POST here).
+ *  - date (اختیاری) UnixTime: زمان ارسال آینده؛ اگر خالی باشد «اکنون».
+ *  - localid (اختیاری) String: شناسه محلی؛ برای جلوگیری از ارسال تکراری. اگر چند receptor، باید به همان تعداد (comma separated) باشد.
+ *  - repeat (اختیاری در حال حاضر غیر فعال per doc) int: تکرار 0..5 (فاصله 3 دقیقه). Library validates range if provided.
+ *  - tag (اختیاری) String: نام تگ (200 chars, pattern ^[A-Za-z0-9_-]{1,200}$ ) must be pre-created.
+ */
 export interface CallMakeTTSParams {
-  receptor: string; // comma separated list
-  message: string; // TTS message
-  date?: number;
-  localid?: string;
+  receptor: string; // comma separated list (1..200 numbers)
+  message: string; // TTS message text
+  date?: number; // future schedule (unix seconds)
+  localid?: string; // optional single OR comma-separated list matching receptor count
+  repeat?: number; // 0..5 (currently inactive server-side but validated client-side)
+  tag?: string; // analytics tag (server accepts same constraints as SMS tag)
+}
+
+/** Response entry for call/maketts (mirrors SMS select entry subset) */
+export interface CallMakeTTSEntry {
+  messageid: number;
+  message: string;
+  status: number;
+  statustext: string;
+  sender: string;
+  receptor: string;
+  date: number;
+  cost: number;
+  [extra: string]: any;
 }
 
 // Utility union for parameter objects accepted by request wrapper
@@ -840,7 +865,63 @@ export class KavenegarApi {
     return this.request('account', 'config', params, cb);
   }
   CallMakeTTS(params: CallMakeTTSParams, cb?: KavenegarCallback) {
-    return this.request('call', 'maketts', params, cb);
+    // Validation per voice call doc
+    if (!params || typeof params.receptor !== 'string' || !params.receptor.trim()) {
+      throw new Error('receptor is required (comma separated string)');
+    }
+    if (!params.message || typeof params.message !== 'string') {
+      throw new Error('message is required');
+    }
+    // Normalize receptor list
+    const receptors = params.receptor.split(',').map(r => r.trim()).filter(r => r.length > 0);
+    if (receptors.length === 0) {
+      throw new Error('At least one receptor required');
+    }
+    if (receptors.length > 200) {
+      throw new Error('Maximum 200 receptors allowed (414)');
+    }
+    // localid matching (if provided and contains commas OR multiple receptors)
+    let localid = params.localid;
+    if (localid) {
+      const localIds = localid.split(',').map(x => x.trim()).filter(x => x.length > 0);
+      if (localIds.length !== 1 && localIds.length !== receptors.length) {
+        throw new Error('localid count must equal receptor count or be a single id');
+      }
+      // If single id and multiple receptors, server behavior: prevent duplicate? We'll send as is.
+      localid = localIds.join(',');
+    }
+    // repeat range 0..5
+    if (typeof params.repeat !== 'undefined') {
+      if (typeof params.repeat !== 'number' || !Number.isInteger(params.repeat) || params.repeat < 0 || params.repeat > 5) {
+        throw new Error('repeat must be integer between 0 and 5');
+      }
+    }
+    // date (must be unix seconds & not in the past if provided)
+    if (typeof params.date !== 'undefined') {
+      if (typeof params.date !== 'number' || !Number.isFinite(params.date)) {
+        throw new Error('date must be a unix seconds number');
+      }
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (params.date < nowSec) {
+        throw new Error('date (schedule) cannot be in the past');
+      }
+    }
+    // tag validation (reuse SMS tag rules)
+    if (params.tag !== undefined) {
+      const tagPattern = /^[A-Za-z0-9_-]{1,200}$/;
+      if (!tagPattern.test(params.tag)) {
+        throw new Error('tag must match pattern ^[A-Za-z0-9_-]{1,200}$');
+      }
+    }
+    const payload: Record<string, any> = {
+      receptor: receptors.join(','),
+      message: params.message
+    };
+    if (typeof params.date === 'number') payload.date = params.date;
+    if (localid) payload.localid = localid;
+    if (typeof params.repeat === 'number') payload.repeat = params.repeat;
+    if (params.tag) payload.tag = params.tag;
+    return this.request<CallMakeTTSEntry>('call', 'maketts', payload, cb as KavenegarCallback<CallMakeTTSEntry>);
   }
 
   /**
