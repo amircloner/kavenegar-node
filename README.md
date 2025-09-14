@@ -77,6 +77,55 @@ sample output
 */
 ```
 
+### TypeScript / Modern Usage
+
+You can now use the SDK with full TypeScript typings. First install:
+
+```bash
+npm install kavenegar
+```
+
+Import and use with promises:
+
+```ts
+import { KavenegarApi } from 'kavenegar/dist/kavenegar';
+// Or: import KavenegarApi from 'kavenegar/dist/kavenegar';
+
+const api = new KavenegarApi({ apikey: process.env.KAVENEGAR_API_KEY! });
+
+async function sendSample() {
+    const res = await api.Send({
+        message: 'Hello from TypeScript',
+        receptor: '09123456789',
+        sender: '10004346'
+    });
+    console.log(res.return.status, res.entries);
+}
+sendSample();
+```
+
+Or still use the callback style (backward compatible):
+
+```ts
+import { KavenegarApiFactory } from 'kavenegar/dist/kavenegar';
+const api = KavenegarApiFactory({ apikey: 'your-key' });
+api.Send({
+    message: 'Hi',
+    receptor: '09123456789'
+}, (entries, status, message) => {
+    console.log(status, message, entries);
+});
+```
+
+Available typed parameter helpers include `SendParams`, `LookupParams`, `AccountConfigParams`, etc. Return values resolve to a `KavenegarApiResponse<T>` shape containing `entries` and a `return` status object.
+
+If you are using CommonJS and want the old factory style:
+
+```js
+const { KavenegarApi } = require('kavenegar/dist/kavenegar');
+const api = new KavenegarApi({ apikey: 'your-key' });
+```
+
 Verify Lookup:
 
 ```node
