@@ -71,6 +71,15 @@ export interface StatusParams {
   localid?: string | number | Array<string | number>;
 }
 
+// Response entry for status / statuslocalmessageid endpoints
+export interface StatusEntry {
+  messageid: number;
+  status: number; // numeric delivery status code (see Kavenegar status table)
+  statustext: string; // human readable (FA) description
+  // Server may occasionally add more keys; keep index signature for forward compatibility
+  [extra: string]: any;
+}
+
 export interface ReceiveParams {
   line?: string;
   isread?: boolean | number; // API might return 0/1
@@ -151,6 +160,31 @@ export class KavenegarApi {
     this.host = options.host || 'api.kavenegar.com';
     this.version = options.version || 'v1';
     this.apikey = options.apikey;
+  }
+
+  /**
+   * Normalize status params: accepts single id, comma separated string, or array of ids (string|number).
+   * Ensures the selected key (messageid/localid) is converted to a comma separated string.
+   * Enforces the documented limit of maximum 500 ids per request.
+   */
+  private normalizeStatusParams(params: StatusParams, key: 'messageid' | 'localid'): StatusParams {
+    const value = params[key];
+    if (typeof value === 'undefined' || value === null) return params;
+    let ids: Array<string | number>; // working list
+    if (Array.isArray(value)) {
+      ids = value;
+    } else if (typeof value === 'string') {
+      // Allow user-provided comma separated string (trim spaces)
+      ids = value.split(',').map(v => v.trim()).filter(v => v.length > 0);
+    } else {
+      ids = [value];
+    }
+    if (ids.length > 500) {
+      throw new Error('Status request exceeds 500 ids limit');
+    }
+    // Rebuild as comma separated string (numbers remain as-is, ensure no extraneous spaces)
+    const joined = ids.join(',');
+    return { ...params, [key]: joined };
   }
 
   private request<T = any>(
@@ -244,10 +278,12 @@ export class KavenegarApi {
     return this.request('sms', 'sendarray', payload, cb);
   }
   Status(params: StatusParams, cb?: KavenegarCallback) {
-    return this.request('sms', 'status', params, cb);
+    const normalized = this.normalizeStatusParams(params, 'messageid');
+    return this.request<StatusEntry[]>('sms', 'status', normalized, cb);
   }
   StatusLocalMessageid(params: StatusParams, cb?: KavenegarCallback) {
-    return this.request('sms', 'statuslocalmessageid', params, cb);
+    const normalized = this.normalizeStatusParams(params, 'localid');
+    return this.request<StatusEntry[]>('sms', 'statuslocalmessageid', normalized, cb);
   }
   Select(params: Record<string, any>, cb?: KavenegarCallback) {
     return this.request('sms', 'select', params, cb);

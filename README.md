@@ -309,6 +309,81 @@ bulk();
 | 419 | اندازه آرایه های پیام / گیرنده / ارسال کننده برابر نیست |
 | 607 | نام تگ اشتباه است |
 
+## کنترل وضعیت پیامک ها (Status)
+
+پس از ارسال، هر پیامک ابتدا «در صف» قرار می‌گیرد، ظرف کمتر از 1 ثانیه به مخابرات تحویل می‌شود (وضعیت «ارسال به مخابرات») و سپس طی حداکثر چند دقیقه به یکی از وضعیت‌های نهایی جدول وضعیت پیامک‌ها می‌رسد (مثلاً رسیده به گیرنده، نرسیده، مسدود و ...). متد `Status` برای دریافت رسید (Delivery Report) پیام‌ها بر اساس `messageid` استفاده می‌شود.
+
+محدودیت‌ها و نکات کلیدی:
+
+1. در هر فراخوانی حداکثر 500 شناسه مجاز است (بیشتر => خطای 414 یا خطای کتابخانه).
+2. فقط می‌توانید وضعیت پیامک‌های 48 ساعت گذشته را دریافت کنید؛ بعد از آن مقدار `status = 100` (معتبر نیست / منقضی) بازگردانده می‌شود.
+3. اگر شناسه معتبر نباشد یا مربوط به شما نباشد، وضعیت همان `100` خواهد بود.
+4. امکان فعال‌سازی ارسال خودکار وضعیت (Status Callback URL) از بخش تنظیمات خطوط وجود دارد.
+
+### ورودی
+
+| پارامتر | وضعیت | نوع | توضیح |
+|---------|-------|-----|-------|
+| messageid | اجباری | String/Number/Array | شناسه(های) یکتای پیامک، می‌تواند عدد تکی، رشته «کاما جدا» یا آرایه باشد |
+
+کتابخانه انواع زیر را می‌پذیرد و تبدیل می‌کند:
+
+```ts
+api.Status({ messageid: 85463238 });
+api.Status({ messageid: '85463238,85463239' });
+api.Status({ messageid: [85463238, 85463239] });
+```
+
+### خروجی نمونه
+
+```json
+{
+    "return": { "status": 200, "message": "تایید شد" },
+    "entries": [
+        { "messageid": 85463238, "status": 10, "statustext": "رسیده به گیرنده" },
+        { "messageid": 85463239, "status": 4,  "statustext": "ارسال به مخابرات" }
+    ]
+}
+```
+
+### TypeScript
+
+```ts
+import { KavenegarApi, StatusEntry } from 'kavenegar/dist/kavenegar';
+const api = new KavenegarApi({ apikey: process.env.KAVENEGAR_API_KEY! });
+
+async function checkStatus(ids: number[]) {
+    const res = await api.Status({ messageid: ids });
+    const list: StatusEntry[] = res.entries; // typed
+    list.forEach(it => {
+        console.log(it.messageid, it.status, it.statustext);
+    });
+}
+checkStatus([85463238, 85463239]);
+```
+
+### خطاهای رایج
+
+| کد | توضیح |
+|----|-------|
+| 400 | پارامتر ناقص (عدم ارسال messageid) |
+| 414 | تعداد شناسه‌ها بیش از حد مجاز (بیش از 500) |
+
+در صورت عبور از محدودیت 500 شناسه، کتابخانه پیش از ارسال، خطا با متن `Status request exceeds 500 ids limit` پرتاب می‌کند.
+
+### StatusLocalMessageid
+
+اگر هنگام ارسال از `localid` (یا `localmessageids`) استفاده کرده‌اید، می‌توانید برای دریافت وضعیت، به جای `messageid` از متد زیر بهره ببرید:
+
+```ts
+const res = await api.StatusLocalMessageid({ localid: ['loc1','loc2'] });
+```
+
+ساختار خروجی مشابه `Status` است با همان فیلدهای `messageid`, `status`, `statustext`.
+
+> توجه: جدول کامل کدهای وضعیت در مستندات رسمی کاوه نگار موجود است؛ برخی کدهای متداول: 1 (در صف)، 4 (ارسال به مخابرات)، 10 (رسیده به گیرنده)، 100 (شناسه نامعتبر/منقضی).
+
+
 ## Contribution
 
 Bug fixes, docs, and enhancements welcome! Please let us know <a href="mailto:support@kavenegar.com?Subject=SDK" target="_top">support@kavenegar.com</a>
