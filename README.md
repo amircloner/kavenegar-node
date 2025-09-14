@@ -242,7 +242,6 @@ api.SendArray({
         // type: [1,1,1],
         // localmessageids: ['loc1','loc2','loc3'],
         // hide: 1,
-        // tag: 'bulk-campaign'
 }, function(entries, status, statustext){
         console.log(status, statustext);
         console.log(entries);

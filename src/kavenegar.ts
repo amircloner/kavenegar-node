@@ -87,6 +87,22 @@ export interface ReceiveParams {
   todate?: number;
 }
 
+// Parameters for status by receptor (statusbyreceptor)
+export interface StatusByReceptorParams {
+  receptor: string; // single receptor per docs (number/MSISDN)
+  startdate: number; // required Unix time (seconds) start of range
+  enddate?: number; // optional Unix time end of range
+}
+
+// Response entry for statusbyreceptor (subset of StatusEntry plus receptor)
+export interface StatusByReceptorEntry {
+  messageid: number;
+  receptor: string;
+  status: number;
+  statustext: string;
+  [extra: string]: any;
+}
+
 /**
  * Parameters for Verify Lookup (اعتبار سنجی)
  * Doc (FA) summary:
@@ -344,6 +360,50 @@ export class KavenegarApi {
   }
   CallMakeTTS(params: CallMakeTTSParams, cb?: KavenegarCallback) {
     return this.request('call', 'maketts', params, cb);
+  }
+
+  /**
+   * Fetch delivery status list for all messages sent TO a specific receptor (mobile number) within a time window.
+   * Persian Doc Summary (وضعیت پیام بر اساس شماره گیرنده):
+   *  - receptor (اجباری): شماره گیرنده
+   *  - startdate (اجباری – UnixTime seconds)
+   *  - enddate (اختیاری – UnixTime seconds)
+   * Notes / Validation enforced client-side:
+   *  - If enddate omitted => server considers one day window (startdate .. startdate + 86400)
+   *  - If enddate provided it MUST be >= startdate
+   *  - Max span between startdate and enddate is 1 day (86400 seconds)
+   *  - All times assumed to be in seconds (UNIX epoch). Library does not auto-convert ms.
+   * Failure cases: throws Error with descriptive message before network call.
+   */
+  StatusByReceptor(params: StatusByReceptorParams, cb?: KavenegarCallback) {
+    if (!params || !params.receptor) {
+      throw new Error('receptor is required');
+    }
+    if (typeof params.startdate !== 'number' || !Number.isFinite(params.startdate)) {
+      throw new Error('startdate (unix seconds) is required');
+    }
+    const ONE_DAY = 86400; // seconds
+    let { startdate, enddate } = params;
+    if (enddate !== undefined) {
+      if (typeof enddate !== 'number' || !Number.isFinite(enddate)) {
+        throw new Error('enddate must be a unix seconds number');
+      }
+      if (enddate < startdate) {
+        throw new Error('enddate cannot be less than startdate');
+      }
+      if (enddate - startdate > ONE_DAY) {
+        throw new Error('Maximum allowed range is 1 day (86400 seconds)');
+      }
+    }
+    // If enddate omitted we simply omit; server will assume one day window.
+    const payload: Record<string, any> = { receptor: params.receptor, startdate };
+    if (enddate !== undefined) payload.enddate = enddate;
+    return this.request<StatusByReceptorEntry[]>(
+      'sms',
+      'statusbyreceptor',
+      payload,
+      cb as KavenegarCallback<StatusByReceptorEntry[]>
+    );
   }
 }
 
