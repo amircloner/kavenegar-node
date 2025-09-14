@@ -172,6 +172,41 @@ export interface SelectOutboxParams {
 }
 
 /**
+ * Parameters for CountOutbox (تعداد ارسال ها)
+ * Persian Doc Summary:
+ *  - startdate (اجباری) UnixTime seconds: تاریخ شروع بازه
+ *  - enddate (اختیاری) UnixTime seconds: تاریخ پایان بازه؛ اگر خالی باشد تا «اکنون» در نظر گرفته می شود
+ *  - status (اختیاری) Integer: برای فیلتر تعداد پیامک ها با وضعیت خاص (مثلاً 1=در صف, 10=رسیده)
+ * Output fields (entries[0]): startdate, enddate, sumpart, sumcount, cost
+ * Constraints / Notes:
+ *  - حداکثر فاصله زمانی بین startdate و enddate برابر با 1 روز (86400 ثانیه) است.
+ *  - startdate حداکثر می تواند 4 روز قبل باشد (now - startdate <= 4*86400).
+ *  - اگر enddate ارسال نشود تا زمان فعلی در نظر گرفته می شود.
+ *  - enddate نباید از startdate کوچکتر باشد.
+ *  - جهت دریافت تعداد پیامک های در صف کافیست status=1 ارسال شود.
+ *  - خطا 417 در صورت تاریخ نامعتبر یا کوچک تر بودن enddate از startdate.
+ */
+export interface CountOutboxParams {
+  startdate: number; // required UnixTime seconds
+  enddate?: number; // optional UnixTime seconds
+  status?: number; // optional delivery status code filter
+  [extra: string]: any;
+}
+
+/**
+ * Response entry for CountOutbox.
+ * sumpart * tariff = cost (per doc)
+ */
+export interface CountOutboxEntry {
+  startdate: number;
+  enddate: number; // server echoes a normalized end value (may equal startdate)
+  sumpart: number; // total message parts (concatenated segments) sent
+  sumcount: number; // total count of logical messages sent
+  cost: number; // total billing cost in Rial
+  [extra: string]: any;
+}
+
+/**
  * Parameters for Verify Lookup (اعتبار سنجی)
  * Doc (FA) summary:
  *  - receptor (الزامی): شماره گیرنده. بین المللی با 00 + کد کشور
@@ -232,6 +267,7 @@ export type AnyParams =
   | CallMakeTTSParams
   | SelectOutboxParams
   | LatestOutboxParams
+  | CountOutboxParams
   | Record<string, any>;
 
 export class KavenegarApi {
@@ -456,9 +492,55 @@ export class KavenegarApi {
     }
     return this.request<LatestOutboxEntry[]>('sms', 'latestoutbox', p, cb as KavenegarCallback<LatestOutboxEntry[]>);
   }
-  CountOutbox(params: Record<string, any>, cb?: KavenegarCallback) {
-    return this.request('sms', 'countoutbox', params, cb);
-  }
+    /**
+     * CountOutbox - تعداد ارسال ها
+     * Returns aggregate counts (sumpart, sumcount, cost) for sent SMS in a time window.
+     * Client-side validation according to provided Persian docs:
+     *  - startdate: required, unix seconds, not older than 4 days.
+     *  - enddate: optional; if omitted server treats it as now. If provided must be >= startdate.
+     *  - Max span between startdate and enddate is 1 day (86400 seconds). (If enddate omitted we allow skip check; server enforces now-start <= 1 day anyway. For consistency we compute a virtual now end.)
+     *  - status: optional numeric delivery status code to filter counts; if provided must be finite number.
+     * Throws Error BEFORE network if constraints violated.
+     */
+    CountOutbox(params: CountOutboxParams, cb?: KavenegarCallback<CountOutboxEntry[]>) {
+      if (!params || typeof params.startdate !== 'number' || !Number.isFinite(params.startdate)) {
+        throw new Error('startdate (unix seconds) is required');
+      }
+      const nowSec = Math.floor(Date.now() / 1000);
+      const FOUR_DAYS = 4 * 86400;
+      const ONE_DAY = 86400;
+      if (nowSec - params.startdate > FOUR_DAYS) {
+        throw new Error('startdate cannot be older than 4 days');
+      }
+      let end = params.enddate;
+      if (end !== undefined) {
+        if (typeof end !== 'number' || !Number.isFinite(end)) {
+          throw new Error('enddate must be a unix seconds number');
+        }
+        if (end < params.startdate) {
+          throw new Error('enddate cannot be less than startdate');
+        }
+        if (end - params.startdate > ONE_DAY) {
+          throw new Error('Maximum allowed range is 1 day (86400 seconds)');
+        }
+      } else {
+        // If omitted treat as now for local validation of span
+        end = nowSec;
+        if (end - params.startdate > ONE_DAY) {
+          throw new Error('Maximum allowed range is 1 day (86400 seconds)');
+        }
+      }
+      if (params.status !== undefined) {
+        if (typeof params.status !== 'number' || !Number.isFinite(params.status)) {
+          throw new Error('status must be a number');
+        }
+      }
+      // Build payload (do not send computed end if user omitted it; let server treat as now)
+      const payload: Record<string, any> = { startdate: params.startdate };
+      if (params.enddate !== undefined) payload.enddate = params.enddate;
+      if (params.status !== undefined) payload.status = params.status;
+      return this.request<CountOutboxEntry[]>('sms', 'countoutbox', payload, cb as KavenegarCallback<CountOutboxEntry[]>);
+    }
   Cancel(params: Record<string, any>, cb?: KavenegarCallback) {
     return this.request('sms', 'cancel', params, cb);
   }

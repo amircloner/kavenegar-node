@@ -319,7 +319,7 @@ bulk();
 3. اگر شناسه معتبر نباشد یا مربوط به شما نباشد، وضعیت همان `100` خواهد بود.
 4. امکان فعال‌سازی ارسال خودکار وضعیت (Status Callback URL) از بخش تنظیمات خطوط وجود دارد.
 
-### ورودی
+### ورودی (CountOutbox)
 
 | پارامتر | وضعیت | نوع | توضیح |
 |---------|-------|-----|-------|
@@ -520,6 +520,95 @@ recent();
 ### English Summary
 
 Fetch up to the latest 500 sent SMS records. Optional parameters: `pagesize` (1..500, default 500) and `sender` to filter by a specific dedicated line. Response entries contain: `messageid, message, status, statustext, sender, receptor, date, cost`. Requires whitelisted IP; errors: 400 (invalid params), 407 (access denied), 412 (invalid sender).
+
+
+## تعداد ارسال ها (CountOutbox)
+
+این متد برای دریافت تعداد پیامک های ارسالی شما در یک بازه زمانی کوتاه استفاده می‌شود و آمار تجمیعی صفحات (segments) و تعداد پیام‌ها و هزینه را بازمی‌گرداند.
+
+### ورودی
+
+| پارامتر | وضعیت | نوع | توضیح |
+|---------|-------|-----|-------|
+| startdate | اجباری | UnixTime (sec) | تاریخ شروع بازه (حداکثر 4 روز قبل از الان) |
+| enddate | اختیاری | UnixTime (sec) | تاریخ پایان بازه؛ اگر خالی ارسال شود تا «اکنون» در نظر گرفته می‌شود |
+| status | اختیاری | Number | فیلتر بر اساس وضعیت تحویل پیامک (مثلاً 1=در صف، 10=رسیده) |
+
+### محدودیت ها / اعتبارسنجی (CountOutbox)
+1. `startdate` باید عدد معتبر ثانیه یونیکس و حداکثر 4 روز قبل باشد؛ در غیر اینصورت خطا پرتاب می‌شود.
+2. اگر `enddate` مقداردهی شود باید: (الف) عدد معتبر باشد (ب) از `startdate` کوچکتر نباشد (ج) اختلاف آن با `startdate` از 86400 ثانیه (1 روز) بیشتر نباشد.
+3. اگر `enddate` ارسال نشود، کتابخانه برای کنترل بازه فرض را بر «اکنون» گذاشته و اگر فاصله بیش از 1 روز باشد خطا می‌دهد.
+4. اگر `status` ارسال شود باید عدد معتبر باشد (Number.isFinite).
+
+خطای سرور مستند شده: 417 (تاریخ نامعتبر یا تاریخ پایان کوچکتر از آغاز).
+
+### خروجی نمونه (CountOutbox)
+
+```json
+{
+    "return": { "status": 200, "message": "تایید شد" },
+    "entries": [
+        {
+            "startdate": 1409533200,
+            "enddate": 1409533200,
+            "sumpart": 45000,
+            "sumcount": 15000,
+            "cost": 5175000
+        }
+    ]
+}
+```
+
+### فیلدهای خروجی
+
+| فیلد | نوع | توضیح |
+|------|-----|-------|
+| startdate | Long | تاریخ شروع (یونیکس) |
+| enddate | Long | تاریخ پایان (یا مساوی startdate در صورتی که بازه یک نقطه ای باشد) |
+| sumpart | Long | مجموع تعداد صفحات (segments) پیامک ها |
+| sumcount | Long | تعداد کل پیامک های ارسالی (logical messages) |
+| cost | Long | مجموع هزینه پیامک های ارسالی (ریال)؛ برابر است با `sumpart * تعرفه` |
+
+### نکات (CountOutbox)
+
+1. حداکثر فاصله زمانی بین `startdate` و `enddate` یک روز است.
+2. `startdate` نمی تواند بیش از 4 روز قبل باشد.
+3. برای دریافت آمار از یک تاریخ تا همین لحظه `enddate` را خالی بگذارید.
+4. اگر فقط آمار پیامک های در صف را می‌خواهید `status=1` بفرستید.
+5. اگر `enddate < startdate` باشد یا تاریخ ها نامعتبر باشند خطای 417 بازگردانده می‌شود (کتابخانه پیش از ارسال نیز خطا می‌دهد).
+
+### مثال استفاده (JavaScript)
+
+```js
+var Kavenegar = require('kavenegar');
+var api = Kavenegar.KavenegarApi({ apikey: 'your-api-key' });
+
+api.CountOutbox({ startdate: 1409533200, enddate: 1409570000, status: 10 }, function(entries, status, message){
+    console.log(status, message);
+    console.log(entries);
+});
+```
+
+### TypeScript / Promise (CountOutbox)
+
+```ts
+import { KavenegarApi, CountOutboxEntry } from 'kavenegar/dist/kavenegar';
+const api = new KavenegarApi({ apikey: process.env.KAVENEGAR_API_KEY! });
+
+async function stats(){
+    const res = await api.CountOutbox({ startdate: Math.floor(Date.now()/1000) - 3600 }); // last hour until now
+    const rows: CountOutboxEntry[] = res.entries;
+    if (rows.length) {
+        const r = rows[0];
+        console.log('Parts:', r.sumpart, 'Messages:', r.sumcount, 'Cost:', r.cost);
+    }
+}
+stats();
+```
+
+### English Summary (CountOutbox)
+
+Returns aggregate counts for sent SMS within a short window: startdate (required), optional enddate (else now), optional status filter. Constraints: startdate not older than 4 days, max span 1 day, enddate >= startdate. Response: array with one entry containing startdate, enddate, sumpart (total segments), sumcount (logical messages), cost (rial). Error 417 for invalid dates.
 
 
 
