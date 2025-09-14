@@ -49,17 +49,34 @@ export interface ReceiveParams {
   todate?: number;
 }
 
-export type LookupParams = Record<string, string | number | undefined> & {
-  template: string;
+/**
+ * Parameters for Verify Lookup (اعتبار سنجی)
+ * Doc (FA) summary:
+ *  - receptor (الزامی): شماره گیرنده. بین المللی با 00 + کد کشور
+ *  - template (الزامی): نام الگوی تایید شده
+ *  - token , token2 , token3 (string, no spaces) حداکثر 100 کاراکتر
+ *  - token10 (up to 5 spaces allowed) حداکثر 100 کاراکتر
+ *  - token20 (up to 8 spaces allowed) حداکثر 100 کاراکتر
+ *  - type: 'sms' | 'call' (default sms). If token contains non-digit chars, call is not allowed
+ *  - tag: optional analytic tag (only english letters/digits, dash - or underscore _ , max 200)
+ */
+export interface LookupParams {
   receptor: string;
+  template: string;
   token?: string;
   token2?: string;
   token3?: string;
   token10?: string;
   token20?: string;
+  /** @deprecated Not in current public docs; kept for backward compatibility */
   token30?: string;
-  type?: string | number;
-};
+  /** Message delivery type; 'sms' (default) or 'call' (voice). Library leaves validation to server. */
+  type?: 'sms' | 'call' | string;
+  /** Optional tag identifier defined in panel */
+  tag?: string;
+  /** Allow extra params forward compatible */
+  [extra: string]: string | number | undefined;
+}
 
 export interface AccountConfigParams {
   apilogs?: boolean | number;
@@ -200,6 +217,11 @@ export class KavenegarApi {
   SendByPostalCode(params: PostalCodeParams, cb?: KavenegarCallback) {
     return this.request('sms', 'sendbypostalcode', params, cb);
   }
+  /**
+   * High-priority verification message sender (Verify Lookup)
+   * Only needs receptor + template + at least token.
+   * Server chooses best sender number automatically.
+   */
   VerifyLookup(params: LookupParams, cb?: KavenegarCallback) {
     return this.request('verify', 'lookup', params, cb);
   }

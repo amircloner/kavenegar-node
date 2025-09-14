@@ -1,9 +1,17 @@
 {
   "name": "kavenegar",
-  "version": "1.1.6",
-  "description": "Kavenegar Node.js SDK with TypeScript typings",
+  "version": "1.1.7",
+  "description": "Kavenegar Node.js SDK (SMS, Voice, Verify Lookup) with TypeScript typings",
   "main": "dist/kavenegar.js",
   "types": "dist/kavenegar.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/kavenegar.js",
+      "import": "./dist/kavenegar.js",
+      "types": "./dist/kavenegar.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",
@@ -16,13 +24,18 @@
   "keywords": [
     "SMS",
     "kavenegar",
-    "SDK"
+    "SDK",
+    "verify",
+    "lookup",
+    "otp",
+    "voice"
   ],
   "author": "Arya sadeghy <Aryasadeghy@gmail.com> (http://yourblog.com)",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/KaveNegar/kavenegar-node/issues"
   },
+  "sideEffects": false,
   "dependencies": {},
   "devDependencies": {
     "typescript": "^5.3.3",
