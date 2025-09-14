@@ -80,6 +80,28 @@ export interface StatusEntry {
   [extra: string]: any;
 }
 
+// Parameters for detailed select (پیامک انتخاب) endpoint.
+// messageid is REQUIRED and can be:
+//  - single number or string
+//  - array of numbers/strings (max 500)
+//  - comma separated string of ids (library normalizes)
+export interface SelectParams {
+  messageid: string | number | Array<string | number>;
+}
+
+// Response entry for select endpoint (richer than StatusEntry)
+export interface SelectEntry {
+  messageid: number;
+  message: string; // original sent text
+  status: number; // numeric delivery status code
+  statustext: string; // human readable localized status
+  sender: string; // sender line
+  receptor: string; // receptor number
+  date: number; // Unix time (seconds) send date
+  cost: number; // message billing cost (rial)
+  [extra: string]: any; // forward compatibility
+}
+
 export interface ReceiveParams {
   line?: string;
   isread?: boolean | number; // API might return 0/1
@@ -317,8 +339,25 @@ export class KavenegarApi {
     const normalized = this.normalizeStatusParams(params, 'localid');
     return this.request<StatusEntry[]>('sms', 'statuslocalmessageid', normalized, cb);
   }
-  Select(params: Record<string, any>, cb?: KavenegarCallback) {
-    return this.request('sms', 'select', params, cb);
+  /**
+   * Retrieve detailed information for one or more previously sent messages by messageid.
+   * Persian Doc Summary (انتخاب پیامک / select):
+   *  - Input: messageid (الزامی) up to 500 ids. Accepts single id, comma separated list, or array.
+   *  - Output: entries[] each containing: messageid, message, status, statustext, sender, receptor, date (UnixTime), cost (rial)
+   *  - Differences vs Status: richer payload (text, sender, receptor, cost, date). For frequent polling prefer Status for speed/lower payload.
+   *  - Invalid or not-owned ids return status=100 inside their entry (NOT an HTTP error).
+   *  - Server Errors:
+   *      400 => missing/invalid parameters
+   *      407 => access to requested data denied (e.g., not your message)
+   *      414 => too many ids (>500) – library guards earlier
+   *  - Security: Requires configured IP in panel (per docs) else 407.
+   */
+  Select(params: SelectParams, cb?: KavenegarCallback<SelectEntry[]>) {
+    if (!params || typeof params.messageid === 'undefined' || params.messageid === null) {
+      throw new Error('messageid is required');
+    }
+    const normalized = this.normalizeStatusParams(params as StatusParams, 'messageid');
+    return this.request<SelectEntry[]>('sms', 'select', normalized, cb as KavenegarCallback<SelectEntry[]>);
   }
   SelectOutbox(params: Record<string, any>, cb?: KavenegarCallback) {
     return this.request('sms', 'selectoutbox', params, cb);
