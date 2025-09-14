@@ -7,9 +7,11 @@ export interface KavenegarReturnStatus {
   message: string;
 }
 
-export interface KavenegarApiResponse<TEntry = any> {
+export interface KavenegarApiResponse<TEntry = any, TMeta = any> {
   entries: TEntry;
   return: KavenegarReturnStatus;
+  /** Optional metadata block (paging, counts, etc.) – present on some endpoints like inboxpaged */
+  metadata?: TMeta;
 }
 
 // Callback signature used by library
@@ -154,6 +156,27 @@ export interface ReceiveEntry {
   date: number; // UnixTime تاریخ دریافت
   [extra: string]: any; // forward compatibility
 }
+
+// Paged inbox (inboxpaged) parameters per provided Persian doc snippet
+// Required: linenumber (String), isread (0/1), Optional: startdate, enddate, pagenumber
+export interface InboxPagedParams {
+  linenumber: string; // شماره خط
+  isread: 0 | 1 | boolean; // خوانده نشده 0 ، خوانده شده 1 (boolean accepted for ergonomics)
+  startdate?: number; // UnixTime seconds
+  enddate?: number; // UnixTime seconds
+  pagenumber?: number; // صفحه مورد نظر (1-based)
+}
+
+// Metadata returned by inboxpaged endpoint
+export interface InboxPagedMetadata {
+  totalcount: string; // تعداد کل پیام ها (یا تعداد باقی مانده بسته به isread per doc)
+  currentpage: string; // صفحه فعلی
+  totalpages: string; // تعداد کل صفحه ها
+  pagesize: string; // تعداد پیام های هر صفحه (server fixed 200 per doc)
+  [extra: string]: any;
+}
+
+export interface InboxPagedResponse extends KavenegarApiResponse<ReceiveEntry[], InboxPagedMetadata> {}
 
 // Parameters for status by receptor (statusbyreceptor)
 export interface StatusByReceptorParams {
@@ -330,12 +353,12 @@ export class KavenegarApi {
     return { ...params, [key]: joined };
   }
 
-  private request<T = any>(
+  private request<T = any, M = any>(
     action: string,
     method: string,
     params: AnyParams,
     callback?: KavenegarCallback<T>
-  ): Promise<KavenegarApiResponse<T>> {
+  ): Promise<KavenegarApiResponse<T, M>> {
     return new Promise((resolve, reject) => {
       const path = `/${this.version}/${this.apikey}/${action}/${method}.json`;
       const postdata = querystring.stringify(params as any);
@@ -356,7 +379,7 @@ export class KavenegarApi {
         res.on('data', chunk => (result += chunk));
         res.on('end', () => {
           try {
-            const jsonObject: KavenegarApiResponse<T> = JSON.parse(result);
+            const jsonObject: KavenegarApiResponse<T, M> = JSON.parse(result);
             if (callback) {
               callback(
                 jsonObject.entries as T,
@@ -591,6 +614,65 @@ export class KavenegarApi {
     if (typeof params.fromdate === 'number') payload.fromdate = params.fromdate;
     if (typeof params.todate === 'number') payload.todate = params.todate;
     return this.request<ReceiveEntry[]>('sms', 'receive', payload, cb as KavenegarCallback<ReceiveEntry[]>);
+  }
+  /**
+   * Paged inbox retrieval (inboxpaged)
+   * Persian docs (provided snippet):
+   *  - linenumber (required) شماره خط
+   *  - isread (required) 0=خوانده نشده, 1=خوانده شده
+   *  - startdate (optional) UnixTime
+   *  - enddate (optional) UnixTime
+   *  - pagenumber (optional) صفحه (1-based). If omitted defaults to page 1 (server default).
+   * Returns up to 200 entries per page with metadata { totalcount, currentpage, totalpages, pagesize }.
+   * Notes:
+   *  - totalcount semantic differs for unread mode (isread=0) vs read (isread=1) per doc.
+   *  - Max 2-day span between startdate and enddate; enddate cannot be less than startdate; if dates omitted defaults to last 2 days.
+   *  - Library performs lightweight validation; detailed constraints left to server if ambiguous.
+   */
+  InboxPaged(params: InboxPagedParams, cb?: KavenegarCallback<ReceiveEntry[]>) {
+    if (!params) throw new Error('params required');
+    const { linenumber } = params;
+    if (!linenumber || typeof linenumber !== 'string' || !linenumber.trim()) {
+      throw new Error('linenumber is required and must be non-empty string');
+    }
+    if (typeof params.isread === 'undefined' || params.isread === null) {
+      throw new Error('isread is required (0 for unread, 1 for read)');
+    }
+    let isread: 0 | 1;
+    if (typeof params.isread === 'boolean') {
+      isread = params.isread ? 1 : 0;
+    } else if (params.isread === 0 || params.isread === 1) {
+      isread = params.isread;
+    } else {
+      throw new Error('isread must be 0, 1, false or true');
+    }
+    const payload: Record<string, any> = { linenumber, isread };
+    if (typeof params.startdate === 'number') payload.startdate = params.startdate;
+    if (typeof params.enddate === 'number') {
+      if (typeof params.startdate === 'number' && params.enddate < params.startdate) {
+        throw new Error('enddate cannot be less than startdate');
+      }
+      payload.enddate = params.enddate;
+      if (typeof params.startdate === 'number') {
+        const span = params.enddate - params.startdate;
+        const TWO_DAYS = 2 * 86400; // per doc
+        if (span > TWO_DAYS) {
+          throw new Error('Maximum allowed range between startdate and enddate is 2 days');
+        }
+      }
+    }
+    if (typeof params.pagenumber === 'number') {
+      if (!Number.isInteger(params.pagenumber) || params.pagenumber < 1) {
+        throw new Error('pagenumber must be a positive integer (1-based)');
+      }
+      payload.pagenumber = params.pagenumber;
+    }
+    return this.request<ReceiveEntry[], InboxPagedMetadata>(
+      'sms',
+      'inboxpaged',
+      payload,
+      cb as KavenegarCallback<ReceiveEntry[]>
+    );
   }
   CountInbox(params: Record<string, any>, cb?: KavenegarCallback) {
     return this.request('sms', 'countinbox', params, cb);

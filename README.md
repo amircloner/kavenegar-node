@@ -184,6 +184,100 @@ Error cases: 400 (missing/invalid params), 407 (access denied), others per platf
 
 ---
 
+## دریافت پیامک صفحه بندی شده (InboxPaged)
+
+این متد نسخه صفحه‌بندی شده دریافت پیامک های ورودی است و علاوه بر آرایه `entries`، شیء `metadata` شامل اطلاعات صفحه فعلی را بازمی‌گرداند.
+
+مطابق مستند ارائه شده:
+
+پارامترهای ورودی:
+
+| نام | وضعیت | نوع | توضیح |
+|-----|-------|-----|-------|
+| linenumber | اجباری | String | شماره خط (مثال: 3000202030) |
+| isread | اجباری | Integer (0/1) یا Boolean | 0 = پیامک های خوانده نشده (جدید)، 1 = پیامک های خوانده شده |
+| startdate | اختیاری | UnixTime (sec) | تاریخ آغاز بازه (حداکثر 2 روز فاصله با enddate) |
+| enddate | اختیاری | UnixTime (sec) | تاریخ پایان بازه؛ نباید از startdate کوچکتر باشد؛ حداکثر فاصله 2 روز |
+| pagenumber | اختیاری | Integer | شماره صفحه (۱ مبنا). اگر ارسال نشود صفحه ۱ در نظر گرفته میشود. |
+
+خروجی (نمونه):
+
+```json
+{
+    "return": { "status": 200, "message": "تایید شد" },
+    "entries": [
+        { "messageid": 35850015, "message": "خدمات پیام کوتاه کاوه نگار", "sender": "09*********", "receptor": "3000202030", "date": 1357206241 },
+        { "messageid": 35850016, "message": "خدمات پیام کوتاه کاوه نگار", "sender": "09*********", "receptor": "3000202030", "date": 1357103281 }
+    ],
+    "metadata": {
+        "totalcount": "2",
+        "currentpage": "1",
+        "totalpages": "1",
+        "pagesize": "200"
+    }
+}
+```
+
+توضیح فیلدهای metadata:
+
+| فیلد | توضیح |
+|------|-------|
+| totalcount | تعداد کل پیام ها (برای حالت isread=0 تعداد کل «باقی مانده» به جز پیام های همین صفحه) |
+| currentpage | شماره صفحه فعلی |
+| totalpages | کل تعداد صفحات |
+| pagesize | اندازه هر صفحه (بر اساس مستند 200) |
+
+یادداشت ها:
+1. حداکثر فاصله زمانی بین `startdate` و `enddate` دو روز است.
+2. اگر تاریخ ها ارسال نشوند، بازه دو روز گذشته در نظر گرفته می شود (سمت سرویس).
+3. اگر فقط `startdate` ارسال شود و `enddate` خالی باشد، سرویس بازه دو روزه را لحاظ می کند (مطابق مستند).
+4. برای واکشی پیامک های جدید `isread=0` بفرستید؛ پیام های بازگشتی خوانده شده علامت می‌خورند.
+5. جهت صفحه بعدی، `pagenumber` را افزایش دهید تا زمانی که `currentpage == totalpages` شود.
+
+### استفاده در کتابخانه (TypeScript)
+
+```ts
+import { KavenegarApi, InboxPagedMetadata, ReceiveEntry } from 'kavenegar/dist/kavenegar';
+const api = new KavenegarApi({ apikey: process.env.KAVENEGAR_API_KEY! });
+
+async function fetchAllUnreadPaged(line: string){
+    let page = 1;
+    const collected: ReceiveEntry[] = [];
+    while(true){
+        const res = await api.InboxPaged({ linenumber: line, isread: 0, pagenumber: page });
+        const entries = res.entries || [];
+        collected.push(...entries);
+        const meta: InboxPagedMetadata | undefined = res.metadata;
+        if(!meta || meta.currentpage === meta.totalpages) break;
+        page += 1;
+    }
+    return collected;
+}
+
+fetchAllUnreadPaged('3000202030').then(all => {
+    console.log('Total collected unread:', all.length);
+});
+```
+
+### استفاده ساده (JavaScript / Callback)
+
+```js
+var Kavenegar = require('kavenegar');
+var api = Kavenegar.KavenegarApi({ apikey: 'your-api-key' });
+api.InboxPaged({ linenumber: '3000202030', isread: 0, pagenumber: 1 }, function(entries, status, message){
+    console.log(status, message);
+    console.log('First page size:', entries && entries.length);
+});
+```
+
+### English Summary (InboxPaged)
+Retrieve inbound SMS messages with pagination. Required: linenumber, isread (0 unread / 1 read). Optional: startdate, enddate (max 2-day span), pagenumber (1-based). Response shape: { return, entries[], metadata{ totalcount, currentpage, totalpages, pagesize } }. Keep requesting while currentpage < totalpages to drain all pages. When reading unread with isread=0, returned messages become marked as read.
+
+### Error Handling & Validation
+Client side validation: ensures required parameters, positive pagenumber, enddate >= startdate, and span <= 2 days. Other constraints delegated to server responses (status codes 400/407 etc.).
+
+---
+
 #### پارامترهای متد Send
 
 | پارامتر | وضعیت | نوع | توضیح |
