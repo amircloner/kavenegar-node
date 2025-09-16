@@ -3,8 +3,14 @@
 // while also allowing require('kavenegar') to directly return the factory
 const lib = require('./dist/kavenegar.js');
 
+// Factory function for backward compatibility (without 'new')
+function KavenegarApiFactory(options) {
+  return new lib.KavenegarApi(options);
+}
+
 module.exports = {
   ...lib,
-  KavenegarApi: lib.KavenegarApi || lib.default,
-  default: lib.KavenegarApi || lib.default
+  KavenegarApi: KavenegarApiFactory,
+  KavenegarApiClass: lib.KavenegarApi,
+  default: KavenegarApiFactory
 };

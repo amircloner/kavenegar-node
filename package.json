@@ -2,12 +2,12 @@
   "name": "kavenegar",
   "version": "1.2.0",
   "description": "Kavenegar Node.js SDK (SMS, Voice, Verify Lookup) with TypeScript typings – supports tag, hide, localid, scheduling",
-  "main": "dist/kavenegar.js",
+  "main": "index.js",
   "types": "dist/kavenegar.d.ts",
   "exports": {
     ".": {
-      "require": "./dist/kavenegar.js",
-      "import": "./dist/kavenegar.js",
+      "require": "./index.js",
+      "import": "./index.js",
       "types": "./dist/kavenegar.d.ts"
     },
     "./package.json": "./package.json"
