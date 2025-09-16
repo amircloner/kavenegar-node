@@ -387,10 +387,6 @@ Steps:
 - بازه‌های زمانی را مطابق توضیحات هر متد (۱ روز، ۲ روز، ۴ روز، ۶۰ روز) رعایت کنید؛ کتابخانه خطا می‌دهد.
 - برای Voice TTS از متد `CallMakeTTS` استفاده کنید (تلفن گویا ساده – متن تبدیل به گفتار).
 
-## Legacy Credits
-
-Original work & earlier versions by community contributors. This revision modernizes the codebase with TypeScript and extended documentation.
-
 ---
 
 <div dir='rtl' align='center'>
