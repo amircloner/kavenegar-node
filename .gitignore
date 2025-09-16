@@ -2,7 +2,7 @@
 node_modules/
 
 # TypeScript build output
-dist/
+# dist/
 
 # Logs
 npm-debug.log*

@@ -35,11 +35,13 @@ tests/
 # Source maps
 *.map
 
-# TypeScript source files (since we're publishing compiled JS)
-src/
-tsconfig.json
-jest.config.js
-
 # Development files
 .eslintrc*
 .prettierrc*
+
+# Include TypeScript source and config for building
+# src/ - include source files
+# tsconfig.json - include for building
+
+# Make sure dist/ is included (don't ignore it)
+# dist/
