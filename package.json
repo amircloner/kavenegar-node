@@ -19,7 +19,12 @@
     "test:unit": "jest --selectProjects unit --runInBand",
     "test:integration": "jest --selectProjects integration --runInBand",
     "test:functional": "jest --selectProjects functional --runInBand",
-    "coverage": "jest --coverage --runInBand"
+    "coverage": "jest --coverage --runInBand",
+    "package": "npm run build && npm run package:create",
+    "package:create": "node scripts/create-package.js",
+    "release:patch": "npm version patch && git push && git push --tags",
+    "release:minor": "npm version minor && git push && git push --tags",
+    "release:major": "npm version major && git push && git push --tags"
   },
   "repository": {
     "type": "git",

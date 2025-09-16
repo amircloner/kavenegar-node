@@ -1,0 +1,177 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.2.1)'
+        required: true
+        type: string
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      update_version:
+        description: 'Update package.json version?'
+        required: true
+        default: true
+        type: boolean
+      create_pr:
+        description: 'Create PR for version update?'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  manual-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Update version in package.json
+        if: ${{ github.event.inputs.update_version == 'true' }}
+        run: |
+          if [ "${{ github.event.inputs.version }}" != "" ]; then
+            # Use specific version
+            npm version ${{ github.event.inputs.version }} --no-git-tag-version
+          else
+            # Use release type
+            npm version ${{ github.event.inputs.release_type }} --no-git-tag-version
+          fi
+
+      - name: Get version for release
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build project
+        run: npm run build
+
+      - name: Create PR for version update
+        if: ${{ github.event.inputs.create_pr == 'true' && github.event.inputs.update_version == 'true' }}
+        run: |
+          BRANCH_NAME="release/v${{ steps.get_version.outputs.version }}"
+          
+          # Create and switch to new branch
+          git checkout -b "$BRANCH_NAME"
+          
+          # Add and commit changes
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to ${{ steps.get_version.outputs.version }}"
+          
+          # Push branch
+          git push origin "$BRANCH_NAME"
+          
+          echo "Created branch: $BRANCH_NAME"
+          echo "Please create a PR manually from this branch to master"
+
+      - name: Direct commit to master
+        if: ${{ github.event.inputs.create_pr == 'false' && github.event.inputs.update_version == 'true' }}
+        run: |
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to ${{ steps.get_version.outputs.version }}"
+          git push origin master
+
+      - name: Create package
+        run: |
+          mkdir -p package-dist
+          
+          # Copy built files
+          cp -r dist/ package-dist/ 2>/dev/null || echo "No dist directory found"
+          
+          # Copy source files  
+          cp -r src/ package-dist/
+          
+          # Copy essential files
+          cp package.json package-dist/
+          cp index.js package-dist/ 2>/dev/null || echo "No index.js found"
+          cp README.md package-dist/ 2>/dev/null || echo "No README.md found"
+          cp LICENSE package-dist/ 2>/dev/null || echo "No LICENSE found"
+          cp tsconfig.json package-dist/ 2>/dev/null || echo "No tsconfig.json found"
+          
+          # Create zip
+          cd package-dist
+          zip -r "../kavenegar-v${{ steps.get_version.outputs.version }}.zip" .
+          cd ..
+          
+          echo "Package created: kavenegar-v${{ steps.get_version.outputs.version }}.zip"
+
+      - name: Create tag and release
+        run: |
+          TAG_NAME="v${{ steps.get_version.outputs.version }}"
+          
+          # Check if tag exists and delete if it does
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Tag $TAG_NAME already exists, deleting it first"
+            git tag -d "$TAG_NAME"
+            git push origin --delete "$TAG_NAME" || echo "Remote tag doesn't exist"
+          fi
+          
+          # Create new tag
+          git tag -a "$TAG_NAME" -m "Manual release version ${{ steps.get_version.outputs.version }}"
+          git push origin "$TAG_NAME"
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        id: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          release_name: Release v${{ steps.get_version.outputs.version }}
+          body: |
+            ## Manual Release v${{ steps.get_version.outputs.version }}
+            
+            This release was created manually via GitHub Actions.
+            
+            ### Package Contents
+            - Built TypeScript files
+            - Source code
+            - Package configuration
+            - Documentation
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./kavenegar-v${{ steps.get_version.outputs.version }}.zip
+          asset_name: kavenegar-v${{ steps.get_version.outputs.version }}.zip
+          asset_content_type: application/zip
+
+      - name: Summary
+        run: |
+          echo "🚀 Manual release completed!"
+          echo "📦 Version: ${{ steps.get_version.outputs.version }}"
+          echo "🏷️ Tag: v${{ steps.get_version.outputs.version }}"
+          echo "📁 Package: kavenegar-v${{ steps.get_version.outputs.version }}.zip"
